@@ -1,0 +1,324 @@
+'use strict';
+
+/* Compliance Plus — inspection checklists and risk assessment templates.
+   Edit the wording here to change what appears on site and in reports. */
+
+const ITEM_TYPES = {
+  'fire-door': {
+    label: 'Fire Door', code: 'FD', color: '#c0392b', interval: 6,
+    details: [
+      { key: 'rating', label: 'Fire Rating', type: 'select', options: ['FD30', 'FD30S', 'FD60', 'FD60S', 'FD90', 'FD120', 'Unknown'] },
+      { key: 'config', label: 'Configuration', type: 'select', options: ['Single Leaf', 'Double Leaf', 'Leaf And A Half', 'Riser / Cupboard'] },
+      { key: 'use', label: 'Door Use', type: 'select', options: ['Flat Entrance', 'Communal / Corridor', 'Stair Core', 'Plant / Riser', 'Kitchen', 'Office / Room', 'Final Exit', 'Other'] },
+      { key: 'certification', label: 'Certification Evidence', type: 'select', options: ['Label', 'Plug', 'Certificate', 'None Found'] },
+      { key: 'glazed', label: 'Glazed', type: 'select', options: ['No', 'Yes'] },
+      { key: 'manufacturer', label: 'Manufacturer / Cert No.', type: 'text' }
+    ],
+    checks: [
+      { key: 'cert', q: 'Certification label, plug or certificate present', help: 'Third-party certification evidence for the door set' },
+      { key: 'leaf', q: 'Door leaf in good condition', help: 'No holes, splits, delamination or unauthorised alterations' },
+      { key: 'frame', q: 'Frame secure and undamaged', help: 'Frame fixed firmly, gaps to wall sealed with fire-rated material' },
+      { key: 'gaps', q: 'Leaf-to-frame gaps 2–4 mm', help: 'Measure head, hinge side and closing side' },
+      { key: 'threshold', q: 'Threshold gap within limits', help: 'Normally no more than 3 mm where smoke seals are needed, otherwise per certification (typically ≤ 8–10 mm)' },
+      { key: 'seals', q: 'Intumescent strips and smoke seals intact', help: 'Present, continuous, correct size, not painted over' },
+      { key: 'hinges', q: 'Hinges sound — minimum 3, CE/UKCA marked', help: 'All screws present, no wear or oil leaks' },
+      { key: 'closer', q: 'Self-closer shuts the door fully onto the latch', help: 'Test from 5° and from fully open' },
+      { key: 'latch', q: 'Latch / lock operates correctly', help: 'Engages without slamming; escape doors open without a key' },
+      { key: 'ironmongery', q: 'Ironmongery fire-rated and protected', help: 'Intumescent pads behind locks / hinges where required' },
+      { key: 'glazing', q: 'Glazing fire-rated with secure beads and seals', help: 'Mark N/A if not glazed' },
+      { key: 'signage', q: 'Correct signage fitted', help: '"Fire Door Keep Shut" / "Keep Locked" on the correct face' },
+      { key: 'holdopen', q: 'Not wedged or held open', help: 'Any hold-open devices release on fire alarm' },
+      { key: 'vents', q: 'Letterplate / air grille fire-rated', help: 'Mark N/A if none fitted' }
+    ],
+    readings: [
+      { key: 'gapHead', label: 'Gap At Head', unit: 'mm', min: 2, max: 4 },
+      { key: 'gapHinge', label: 'Gap Hinge Side', unit: 'mm', min: 2, max: 4 },
+      { key: 'gapLock', label: 'Gap Closing Side', unit: 'mm', min: 2, max: 4 },
+      { key: 'gapThreshold', label: 'Threshold Gap', unit: 'mm', max: 10 }
+    ]
+  },
+
+  'pat': {
+    label: 'PAT Appliance', code: 'PAT', color: '#2471a3', interval: 12,
+    details: [
+      { key: 'appliance', label: 'Appliance', type: 'text', placeholder: 'e.g. Kettle, Laptop Charger, Extension Lead' },
+      { key: 'make', label: 'Make', type: 'text' },
+      { key: 'model', label: 'Model', type: 'text' },
+      { key: 'serial', label: 'Serial No.', type: 'text' },
+      { key: 'class', label: 'Electrical Class', type: 'select', options: ['Class I', 'Class II', 'Class III / Other'] },
+      { key: 'category', label: 'Equipment Category', type: 'select', options: ['Portable', 'Hand-Held', 'Movable', 'Stationary', 'IT Equipment', 'Extension Lead / Cable', 'Fixed (Plug Connected)'] },
+      { key: 'fuse', label: 'Fuse Fitted (A)', type: 'select', options: ['3', '5', '13', 'N/A'] },
+      { key: 'environment', label: 'Environment', type: 'select', options: ['Office', 'Kitchen', 'Workshop / Industrial', 'Construction Site', 'Public Area', 'Residential'] }
+    ],
+    checks: [
+      { key: 'plug', q: 'Plug in good condition', help: 'No cracks, burning or bent pins; BS 1363 compliant' },
+      { key: 'fuseok', q: 'Correct fuse fitted', help: 'Rating suits the appliance and cable' },
+      { key: 'terminations', q: 'Plug wiring and cord grip correct', help: 'Internal check where plug can be opened' },
+      { key: 'cable', q: 'Flex / cable undamaged', help: 'No cuts, joins, taped repairs or exposed inner cores' },
+      { key: 'casing', q: 'Appliance casing undamaged', help: 'No cracks, missing covers or loose parts' },
+      { key: 'heat', q: 'No signs of overheating', help: 'No scorch marks or discolouration' },
+      { key: 'suitable', q: 'Suitable for the environment and use', help: 'e.g. not a domestic item in a wet/industrial area' },
+      { key: 'functional', q: 'Functional check satisfactory', help: 'Switches and operates normally' }
+    ],
+    readings: [
+      { key: 'earth', label: 'Earth Continuity', unit: 'Ω', max: 0.1, classes: ['Class I'], note: 'Limit 0.1 Ω plus the resistance of the flex' },
+      { key: 'insulation', label: 'Insulation Resistance', unit: 'MΩ', minByClass: { 'Class I': 1, 'Class II': 2 } },
+      { key: 'leakage', label: 'Leakage / Touch Current', unit: 'mA', maxByClass: { 'Class I': 3.5, 'Class II': 0.25 } },
+      { key: 'polarity', label: 'Polarity (Leads)', unit: '', type: 'passfail' }
+    ]
+  },
+
+  'extinguisher': {
+    label: 'Fire Extinguisher', code: 'EXT', color: '#e74c3c', interval: 12,
+    details: [
+      { key: 'medium', label: 'Type', type: 'select', options: ['Water', 'Foam', 'CO2', 'Dry Powder', 'Wet Chemical', 'Water Mist', 'Fire Blanket'] },
+      { key: 'size', label: 'Size', type: 'text', placeholder: 'e.g. 6 L, 2 kg' },
+      { key: 'manufactureYear', label: 'Year Of Manufacture', type: 'text' }
+    ],
+    checks: [
+      { key: 'place', q: 'In its designated position and visible', help: 'Not obstructed; signage above' },
+      { key: 'mounted', q: 'Wall-mounted or on a stand', help: 'Handle approx. 1 m from floor (0.5 m for heavy units)' },
+      { key: 'seal', q: 'Safety pin and tamper seal intact', help: '' },
+      { key: 'gauge', q: 'Pressure gauge in the green', help: 'N/A for CO2' },
+      { key: 'body', q: 'Body, hose and horn undamaged', help: 'No corrosion, dents or perished hose' },
+      { key: 'service', q: 'Service label in date', help: 'Annual service by a competent person' },
+      { key: 'instructions', q: 'Operating instructions legible', help: '' }
+    ],
+    readings: []
+  },
+
+  'emergency-light': {
+    label: 'Emergency Light', code: 'EL', color: '#d4ac0d', interval: 12,
+    details: [
+      { key: 'fitting', label: 'Fitting Type', type: 'select', options: ['Bulkhead', 'Exit Sign', 'Downlight', 'Twin Spot', 'Recessed', 'Other'] },
+      { key: 'mode', label: 'Mode', type: 'select', options: ['Non-Maintained', 'Maintained', 'Sustained'] },
+      { key: 'duration', label: 'Rated Duration', type: 'select', options: ['3 Hours', '1 Hour'] }
+    ],
+    checks: [
+      { key: 'lamp', q: 'Lamp illuminates on test', help: 'Simulated mains failure using test key' },
+      { key: 'durationok', q: 'Full rated duration achieved', help: 'Annual test only — N/A on monthly checks' },
+      { key: 'charge', q: 'Charging indicator lit after test', help: '' },
+      { key: 'diffuser', q: 'Diffuser clean and undamaged', help: '' },
+      { key: 'pictogram', q: 'Correct pictogram (exit signs)', help: 'Running-man symbol pointing the right way' }
+    ],
+    readings: []
+  },
+
+  'alarm': {
+    label: 'Fire Alarm Device', code: 'FA', color: '#a93226', interval: 12,
+    details: [
+      { key: 'device', label: 'Device', type: 'select', options: ['Manual Call Point', 'Smoke Detector', 'Heat Detector', 'Multi-Sensor', 'Sounder / Beacon', 'Control Panel', 'Other'] },
+      { key: 'zone', label: 'Zone', type: 'text' },
+      { key: 'address', label: 'Device Address', type: 'text' }
+    ],
+    checks: [
+      { key: 'operated', q: 'Device operated / tested correctly', help: 'Signal received at panel' },
+      { key: 'clear', q: 'Unobstructed', help: 'Detectors: 500 mm clear; call points visible and accessible' },
+      { key: 'condition', q: 'Undamaged and securely fixed', help: '' },
+      { key: 'labelled', q: 'Correctly labelled / zone chart accurate', help: '' }
+    ],
+    readings: []
+  },
+
+  'signage': {
+    label: 'Fire Safety Sign', code: 'SGN', color: '#27ae60', interval: 12,
+    details: [
+      { key: 'sign', label: 'Sign', type: 'select', options: ['Fire Exit', 'Fire Action Notice', 'Fire Door Keep Shut', 'Fire Door Keep Locked', 'Extinguisher ID', 'Assembly Point', 'No Smoking', 'Other'] }
+    ],
+    checks: [
+      { key: 'present', q: 'Sign present and correct', help: '' },
+      { key: 'visible', q: 'Clearly visible and legible', help: '' },
+      { key: 'photolum', q: 'Photoluminescent / lit where required', help: '' }
+    ],
+    readings: []
+  },
+
+  'hazard': {
+    label: 'H&S Hazard Point', code: 'HZ', color: '#8e44ad', interval: 12,
+    details: [
+      { key: 'category', label: 'Hazard Category', type: 'select', options: ['Slips, Trips & Falls', 'Working At Height', 'Electrical', 'Hazardous Substances (COSHH)', 'Manual Handling', 'Machinery / Equipment', 'Asbestos', 'Legionella / Water', 'Gas', 'Vehicles', 'Security', 'Other'] },
+      { key: 'description', label: 'Description', type: 'text' }
+    ],
+    checks: [
+      { key: 'controlled', q: 'Hazard adequately controlled', help: '' },
+      { key: 'signs', q: 'Warning signs / barriers in place where needed', help: '' },
+      { key: 'records', q: 'Records / checks up to date', help: '' }
+    ],
+    readings: []
+  },
+
+  'other': {
+    label: 'Other Equipment', code: 'OTH', color: '#566573', interval: 12,
+    details: [
+      { key: 'description', label: 'Description', type: 'text' }
+    ],
+    checks: [
+      { key: 'condition', q: 'In good condition', help: '' },
+      { key: 'operational', q: 'Operates correctly', help: '' },
+      { key: 'records', q: 'Records / service label in date', help: '' }
+    ],
+    readings: []
+  }
+};
+
+/* Checks a reading against its limits. Returns 'pass', 'fail' or '' (no value). */
+function evaluateReading(reading, value, details) {
+  if (value === '' || value === undefined || value === null) return '';
+  if (reading.type === 'passfail') return value;
+  const v = Number(value);
+  if (Number.isNaN(v)) return '';
+  const cls = details && details.class;
+  if (reading.classes && cls && !reading.classes.includes(cls)) return '';
+  let min = reading.min, max = reading.max;
+  if (reading.minByClass) min = reading.minByClass[cls];
+  if (reading.maxByClass) max = reading.maxByClass[cls];
+  if (min !== undefined && v < min) return 'fail';
+  if (max !== undefined && v > max) return 'fail';
+  return 'pass';
+}
+
+function readingLimitText(reading, details) {
+  if (reading.type === 'passfail') return 'Pass / Fail';
+  const cls = details && details.class;
+  const min = reading.minByClass ? reading.minByClass[cls] : reading.min;
+  const max = reading.maxByClass ? reading.maxByClass[cls] : reading.max;
+  if (reading.classes && cls && !reading.classes.includes(cls)) return `Not required for ${cls}`;
+  const parts = [];
+  if (min !== undefined) parts.push(`≥ ${min} ${reading.unit}`);
+  if (max !== undefined) parts.push(`≤ ${max} ${reading.unit}`);
+  return parts.join(' and ') + (reading.note ? ` · ${reading.note}` : '');
+}
+
+/* ---------- Fire Risk Assessment (PAS 79-1 style layout) ---------- */
+const FRA_INFO = [
+  { key: 'use', label: 'Use Of Premises' },
+  { key: 'floors', label: 'Number Of Floors' },
+  { key: 'area', label: 'Approx. Floor Area (m²)' },
+  { key: 'construction', label: 'Construction' },
+  { key: 'occupants', label: 'Maximum Number Of Occupants' },
+  { key: 'sleeping', label: 'Sleeping Accommodation', type: 'select', options: ['No', 'Yes'] },
+  { key: 'atRisk', label: 'People Especially At Risk' },
+  { key: 'responsible', label: 'Responsible Person' },
+  { key: 'evacuation', label: 'Evacuation Strategy', type: 'select', options: ['Simultaneous', 'Phased', 'Stay Put', 'Progressive Horizontal', 'Defend In Place'] },
+  { key: 'previous', label: 'Previous FRA Date' }
+];
+
+const FRA_SECTIONS = [
+  { key: 'electrical', title: 'Electrical Sources Of Ignition', questions: [
+    ['eicr', 'Fixed electrical installation inspected within the last 5 years (EICR)'],
+    ['pat', 'Portable appliances tested / inspected at suitable intervals'],
+    ['leads', 'Extension leads and adaptors used safely (no daisy-chaining or overloading)']
+  ]},
+  { key: 'smoking', title: 'Smoking', questions: [
+    ['policy', 'Suitable smoking policy in place and enforced'],
+    ['area', 'Designated smoking area safely located with suitable bins']
+  ]},
+  { key: 'arson', title: 'Arson', questions: [
+    ['secure', 'Premises reasonably secure against unauthorised entry'],
+    ['bins', 'Bins and combustibles stored away from the building (≥ 6 m or in a secure store)']
+  ]},
+  { key: 'heating', title: 'Heating, Cooking And Other Ignition Sources', questions: [
+    ['fixed', 'Fixed heating / boilers serviced annually'],
+    ['portable', 'Portable heaters avoided or controlled'],
+    ['cooking', 'Cooking areas and extract ducts kept clean and safe'],
+    ['lightning', 'Lightning protection provided where needed']
+  ]},
+  { key: 'housekeeping', title: 'Housekeeping', questions: [
+    ['combustibles', 'Combustible materials kept to a minimum and stored safely'],
+    ['routes', 'Escape routes kept free of storage and obstructions'],
+    ['waste', 'Waste removed regularly']
+  ]},
+  { key: 'contractors', title: 'Contractors And Hot Work', questions: [
+    ['permit', 'Hot work permit system in use'],
+    ['control', 'Contractors briefed and supervised on fire precautions']
+  ]},
+  { key: 'substances', title: 'Dangerous Substances', questions: [
+    ['stored', 'Flammable / dangerous substances minimised and stored correctly (DSEAR / COSHH)']
+  ]},
+  { key: 'escape', title: 'Means Of Escape', questions: [
+    ['exits', 'Adequate number of exits for the number of occupants'],
+    ['travel', 'Travel distances reasonable'],
+    ['protected', 'Escape routes and stairs adequately protected'],
+    ['opening', 'Exit doors open easily, without a key, in the direction of escape where needed'],
+    ['final', 'Final exits lead to a place of safety'],
+    ['inner', 'Inner rooms and dead ends suitably managed']
+  ]},
+  { key: 'doors', title: 'Fire Doors And Compartmentation', questions: [
+    ['doors', 'Fire doors in good condition and self-closing (see fire door schedule)'],
+    ['compartment', 'Compartment walls and floors intact — no unsealed holes or penetrations'],
+    ['voids', 'Roof voids, risers and service ducts fire-stopped']
+  ]},
+  { key: 'lighting', title: 'Emergency Escape Lighting', questions: [
+    ['provided', 'Emergency lighting provided where required'],
+    ['monthly', 'Monthly function tests recorded'],
+    ['annual', 'Annual full-duration test carried out']
+  ]},
+  { key: 'signs', title: 'Fire Safety Signs And Notices', questions: [
+    ['exit', 'Fire exit signage adequate'],
+    ['notices', 'Fire action notices displayed']
+  ]},
+  { key: 'detection', title: 'Fire Detection And Warning', questions: [
+    ['system', 'Suitable fire detection and alarm system for the premises'],
+    ['weekly', 'Weekly alarm tests recorded (rotating call points)'],
+    ['service', 'System serviced by a competent person every 6 months']
+  ]},
+  { key: 'firefighting', title: 'Fire-Fighting Equipment', questions: [
+    ['provided', 'Appropriate extinguishers / blankets provided'],
+    ['serviced', 'Extinguishers serviced annually'],
+    ['trained', 'Staff trained in their use where expected to use them']
+  ]},
+  { key: 'management', title: 'Management Of Fire Safety', questions: [
+    ['responsible', 'Responsible person and fire safety arrangements identified'],
+    ['plan', 'Emergency plan in place and up to date'],
+    ['training', 'Staff fire training given at induction and refreshed'],
+    ['drills', 'Fire drills carried out at least annually'],
+    ['peeps', 'PEEPs in place for anyone who needs help to escape'],
+    ['logbook', 'Fire safety log book kept up to date'],
+    ['cooperation', 'Co-operation with other responsible persons in shared premises']
+  ]}
+];
+
+const FRA_LIKELIHOOD = ['Low', 'Medium', 'High'];
+const FRA_CONSEQUENCE = ['Slight Harm', 'Moderate Harm', 'Extreme Harm'];
+const FRA_MATRIX = {
+  'Low|Slight Harm': 'Trivial', 'Low|Moderate Harm': 'Tolerable', 'Low|Extreme Harm': 'Moderate',
+  'Medium|Slight Harm': 'Tolerable', 'Medium|Moderate Harm': 'Moderate', 'Medium|Extreme Harm': 'Substantial',
+  'High|Slight Harm': 'Moderate', 'High|Moderate Harm': 'Substantial', 'High|Extreme Harm': 'Intolerable'
+};
+const FRA_ACTION_GUIDE = {
+  Trivial: 'No action is required and no detailed records need be kept.',
+  Tolerable: 'No major additional controls required. There may be a need for improvements involving minor or limited cost.',
+  Moderate: 'It is essential that efforts are made to reduce the risk. Risk reduction measures should be implemented within a defined time period.',
+  Substantial: 'Considerable resources might have to be allocated to reduce the risk. Urgent action should be taken.',
+  Intolerable: 'Premises (or relevant area) should not be occupied until the risk is reduced.'
+};
+
+/* ---------- Health & Safety Risk Assessment (HSE five steps) ---------- */
+const HS_INFO = [
+  { key: 'activity', label: 'Activity / Area Assessed' },
+  { key: 'people', label: 'People Present (Staff, Visitors, Contractors…)' },
+  { key: 'responsible', label: 'Responsible Person' }
+];
+
+const HS_PRESETS = [
+  { hazard: 'Slips, trips and falls', who: 'Staff, visitors, contractors', controls: 'Good housekeeping; spills cleaned promptly; flooring maintained; cables routed safely; adequate lighting' },
+  { hazard: 'Working at height', who: 'Staff, contractors', controls: 'Suitable step ladders inspected before use; work at height avoided where possible; training given' },
+  { hazard: 'Manual handling', who: 'Staff', controls: 'Manual handling training; trolleys provided; heavy items stored at waist height' },
+  { hazard: 'Electrical equipment', who: 'Staff, visitors', controls: 'PAT inspection and testing; EICR within 5 years; damaged items removed from use' },
+  { hazard: 'Hazardous substances (COSHH)', who: 'Staff, cleaners', controls: 'COSHH assessments and data sheets held; products stored securely; PPE provided' },
+  { hazard: 'Display screen equipment', who: 'Office staff', controls: 'DSE assessments completed; adjustable chairs; eye tests offered' },
+  { hazard: 'Lone working', who: 'Staff working alone', controls: 'Lone working procedure; check-in system; mobile phone carried' },
+  { hazard: 'Asbestos', who: 'Staff, contractors', controls: 'Asbestos register held and shared with contractors; ACMs managed and monitored' },
+  { hazard: 'Legionella', who: 'Staff, visitors', controls: 'Legionella risk assessment; temperature monitoring; little-used outlets flushed weekly' },
+  { hazard: 'Vehicles and car park', who: 'Pedestrians, drivers', controls: 'Speed limit signs; segregated walkways; adequate lighting' },
+  { hazard: 'Stress and workload', who: 'Staff', controls: 'Regular one-to-ones; reasonable workloads; access to support' },
+  { hazard: 'Gas appliances', who: 'Occupants', controls: 'Annual Gas Safe inspection; CO alarms fitted' }
+];
+
+function hsBand(score) {
+  if (!score) return '';
+  if (score <= 4) return 'Low';
+  if (score <= 9) return 'Medium';
+  if (score <= 16) return 'High';
+  return 'Very High';
+}
