@@ -122,6 +122,7 @@ const ITEM_TYPES = {
     ],
     checks: [
       { key: 'place', q: 'In its designated position and visible', help: 'Not obstructed; signage above' },
+      { key: 'type', q: 'Right type for the fire risk nearby', help: 'Class A solids (water/foam), B liquids (foam/CO2/powder), C gases, D metals, F cooking oil (wet chemical), electrical (CO2)' },
       { key: 'mounted', q: 'Wall-mounted or on a stand', help: 'Handle approx. 1 m from floor (0.5 m for heavy units)' },
       { key: 'seal', q: 'Safety pin and tamper seal intact', help: '' },
       { key: 'gauge', q: 'Pressure gauge in the green', help: 'N/A for CO2' },
@@ -337,6 +338,236 @@ const FRA_ACTION_GUIDE = {
   Substantial: 'Considerable resources might have to be allocated to reduce the risk. Urgent action should be taken.',
   Intolerable: 'Premises (or relevant area) should not be occupied until the risk is reduced.'
 };
+
+/* ---------- From the HM Government "Fire Safety Risk Assessment" guides (2006):
+   Offices and Shops; Transport Premises and Facilities. Figures below are the guides'
+   suggested values — they are flexible and depend on the risk assessment. ---------- */
+const FRA_GUIDE_REF = 'HM Government Fire Safety Risk Assessment guides (2006): Offices and Shops; Transport Premises and Facilities';
+
+const FRA_PREMISES = [
+  ['general', 'General Premises'],
+  ['offices', 'Offices & Shops'],
+  ['transport', 'Transport Premises (Depots, Garages, Terminals)']
+];
+
+// Extra questions from the guides' step checklists, added to the matching sections.
+const FRA_GUIDE_EXTRA = {
+  detection: [
+    ['audible', 'Alarm can be heard and understood throughout the building when set off from any one point'],
+    ['notheard', 'Arrangements for people or areas where the alarm cannot be heard (e.g. visual alarms, pagers)'],
+    ['backup', 'Electrically powered detection and warning has a back-up power supply']
+  ],
+  firefighting: [
+    ['visible', 'Extinguishers visible, or their position shown by signs'],
+    ['misuse', 'Steps taken to prevent misuse or theft of extinguishers'],
+    ['access', 'Clear access for fire engines and to hydrants checked daily']
+  ],
+  escape: [
+    ['allexits', 'At least one escape route stays usable from every part of the premises if a fire blocks an exit'],
+    ['everyone', 'Everyone (including disabled people and visitors) can use the escape routes safely']
+  ],
+  doors: [
+    ['wedged', 'Staff understand fire doors must not be wedged open and escape routes must not be used for storage']
+  ],
+  lighting: [
+    ['darkness', 'Lighting is adequate to use escape routes whenever the premises are used in darkness']
+  ],
+  signs: [
+    ['security', 'Notices explain how to open any security devices on exit doors'],
+    ['fireservice', 'Signs for the fire and rescue service (e.g. valves, electrical cut-offs, hazardous stores) maintained']
+  ],
+  management: [
+    ['visitors', 'Visitors, temporary/agency staff and contractors know what to do in a fire'],
+    ['competent', 'Fire safety equipment is tested and maintained by competent people'],
+    ['records', 'Training, drills, tests and maintenance are recorded (log book)'],
+    ['hazardtraining', 'Staff using or storing hazardous substances are trained in the risks'],
+    ['planavailable', 'Emergency plan is available to staff and to the enforcing authority']
+  ]
+};
+for (const s of FRA_SECTIONS) for (const q of FRA_GUIDE_EXTRA[s.key] || []) if (!s.questions.some(x => x[0] === q[0])) s.questions.push(q);
+
+// Questions that only apply to a type of premises.
+const FRA_PREMISES_SECTIONS = {
+  transport: { key: 'transport', title: 'Transport Premises — Vehicles, Fuel And Workshops', questions: [
+    ['nosmoking', 'Smoking prohibited where vehicles are maintained or refuelled'],
+    ['flammables', 'Flammable liquids kept to a minimum; up to 50 litres in a fire-resisting cabinet or bin, more in a separate store'],
+    ['atex', 'Electrical equipment in fuel / vapour areas is suitable for flammable atmospheres'],
+    ['tanks', 'Fuel tanks suitably designed, preferably outdoors, and protected from fire and vehicle impact'],
+    ['lpg', 'LPG kept to a minimum; cylinders (full and empty) stored securely in the open air or a ventilated store'],
+    ['hotwork', 'Hot work (welding, cutting, grinding) controlled by a permit, with the area checked for at least an hour afterwards'],
+    ['spills', 'Fuel and oil spills cleaned up promptly; drip trays and absorbent available'],
+    ['parking', 'Vehicles parked so they do not block escape routes, exits, hydrants or fire service access'],
+    ['charging', 'Battery charging areas ventilated, away from combustibles, with chargers maintained'],
+    ['waste', 'Oily rags and workshop waste kept in closed metal bins and removed regularly']
+  ] },
+  offices: { key: 'offices', title: 'Offices & Shops — Storage, Display And Waste', questions: [
+    ['understairs', 'Nothing stored under stairs or in escape routes and lobbies'],
+    ['display', 'Displays, stock and furniture do not narrow escape routes or hide exits and signs'],
+    ['packaging', 'Packaging and waste removed regularly and not left near the building'],
+    ['electrical', 'Office equipment switched off when not in use and not overloading sockets'],
+    ['seasonal', 'Seasonal or temporary displays and decorations assessed for fire risk']
+  ] }
+};
+
+function fraSectionsFor(a) {
+  const extra = FRA_PREMISES_SECTIONS[a && a.premisesType];
+  return extra ? [...FRA_SECTIONS, extra] : FRA_SECTIONS;
+}
+
+const FRA_RISK_LEVELS = [
+  ['higher', 'Higher Risk', 'Higher fire risk: e.g. flammable materials, fuel, workshops, sleeping or many people unfamiliar with the building'],
+  ['normal', 'Normal Risk', 'Normal fire risk: most offices, shops and passenger areas'],
+  ['lower', 'Lower Risk', 'Lower fire risk: only in exceptional cases — few people who know the building well, very little to burn']
+];
+
+// Guide Table 2: suggested maximum travel distance (m) to a storey exit, protected stair or final exit.
+const TRAVEL_LIMITS = {
+  other:  { multiple: { higher: 25, normal: 45, lower: 60 }, single: { higher: 12, normal: 18, lower: 25 } },
+  seated: { multiple: { higher: 20, normal: 32, lower: 45 }, single: { higher: 10, normal: 15, lower: 18 } }   // transport: seating in rows
+};
+
+/* Number of people an exit of this clear width can take (guide figures):
+   750 mm → 80 / 100 / 120 people, 1050 mm → 160 / 200 / 240 (higher / normal / lower risk),
+   plus 15 people for each extra 75 mm. */
+function exitCapacity(widthMm, level) {
+  const w = Number(widthMm) || 0;
+  const base = { higher: [80, 160], normal: [100, 200], lower: [120, 240] }[level || 'normal'];
+  if (w < 750) return 0;
+  if (w < 1050) return base[0] + Math.floor((w - 750) / 75) * 15;
+  return base[1] + Math.floor((w - 1050) / 75) * 15;
+}
+
+/* Guide: Class A risk → one water-based extinguisher per ~200 m², at least two per floor;
+   possibly one in very small premises under 90 m². */
+function extinguishersNeeded(areaM2) {
+  const a = Number(areaM2) || 0;
+  if (!a) return 0;
+  if (a < 90) return 1;
+  return Math.max(2, Math.ceil(a / 200));
+}
+const EXTINGUISHER_MAX_TRAVEL = 30;
+
+/* ---------- Fire safety maintenance checks (guide Appendix A1) ---------- */
+const MAINT_FREQ = [
+  ['daily', 'Daily', 1, 'days'], ['weekly', 'Weekly', 7, 'days'], ['monthly', 'Monthly', 1, 'months'],
+  ['quarterly', 'Three-Monthly', 3, 'months'], ['sixmonthly', 'Six-Monthly', 6, 'months'], ['annual', 'Annual', 12, 'months']
+];
+const MAINT_CHECKS = {
+  daily: [
+    ['Escape Routes', 'exitsopen', 'All fire exits open immediately and easily (no bolts, padlocks or chains)'],
+    ['Escape Routes', 'doorsclear', 'Fire doors clear of obstructions'],
+    ['Escape Routes', 'routesclear', 'Escape routes clear of obstructions and combustibles'],
+    ['Fire Warning System', 'panel', 'Fire alarm panel shows "normal"'],
+    ['Fire Warning System', 'manual', 'Whistles, gongs or air horns in place (where used)'],
+    ['Escape Lighting', 'fittings', 'Emergency light fittings and exit signs in good condition'],
+    ['Escape Lighting', 'working', 'Emergency and sign lighting working (maintained fittings lit)'],
+    ['Firefighting Equipment', 'inplace', 'All fire extinguishers in place'],
+    ['Firefighting Equipment', 'visible', 'Fire extinguishers clearly visible'],
+    ['Firefighting Equipment', 'hydrants', 'No vehicles blocking fire hydrants or access to them']
+  ],
+  weekly: [
+    ['Escape Routes', 'fastenings', 'Emergency fastenings on fire exits (push bars, pads) work correctly'],
+    ['Escape Routes', 'external', 'External escape routes clear and safe'],
+    ['Fire Warning System', 'callpoint', 'Testing a manual call point signals the panel (receiving centre told first)'],
+    ['Fire Warning System', 'alarmok', 'Alarm system worked correctly when tested'],
+    ['Fire Warning System', 'heard', 'Staff and others heard the alarm'],
+    ['Fire Warning System', 'linked', 'Linked systems operated (e.g. door holders released, smoke curtains dropped)'],
+    ['Fire Warning System', 'visual', 'Visual / vibrating alarms and pagers work (where fitted)'],
+    ['Fire Warning System', 'voice', 'Voice alarm works and the message was understood (where fitted)'],
+    ['Escape Lighting', 'charging', 'Charging indicators visible on emergency lights (where fitted)'],
+    ['Firefighting Equipment', 'condition', 'All firefighting equipment in good condition']
+  ],
+  monthly: [
+    ['Escape Routes', 'electronic', 'Electronic release mechanisms on escape doors work and fail safe open'],
+    ['Escape Routes', 'autodoors', 'Automatic doors on escape routes fail safe open'],
+    ['Escape Routes', 'seals', 'Fire door seals and self-closers in good condition'],
+    ['Escape Routes', 'shutters', 'Fire compartment roller shutters work correctly'],
+    ['Escape Routes', 'extstairs', 'External escape stairs safe'],
+    ['Escape Routes', 'selfclose', 'Internal self-closing fire doors work correctly'],
+    ['Escape Lighting', 'functiontest', 'All emergency lights and exit signs work on a function test'],
+    ['Escape Lighting', 'generator', 'Emergency generators tested (normally run for one hour)'],
+    ['Firefighting Equipment', 'pressure', 'Stored-pressure extinguishers show correct pressure']
+  ],
+  quarterly: [
+    ['General', 'tanks', 'Emergency water tanks / ponds at normal level'],
+    ['General', 'hydrants', 'No vehicles blocking fire hydrants or access to them']
+  ],
+  sixmonthly: [
+    ['General', 'lifts', 'Firefighting / evacuation lifts tested by a competent person'],
+    ['General', 'sprinklers', 'Sprinkler system tested by a competent person'],
+    ['General', 'compartment', 'Release and closing of fire-resisting compartment doors and shutters tested by a competent person'],
+    ['Fire Warning System', 'service', 'Fire alarm system serviced by a competent person'],
+    ['Escape Lighting', 'third', 'Emergency lights run for one third of their rated duration on test (where required)']
+  ],
+  annual: [
+    ['Escape Routes', 'doorsfit', 'All self-closing fire doors fit correctly'],
+    ['Escape Routes', 'compartmentation', 'Escape route compartmentation in good repair'],
+    ['Escape Lighting', 'fullduration', 'All emergency lights run for their full rated duration on test'],
+    ['Escape Lighting', 'elcompetent', 'Emergency lighting system checked by a competent person'],
+    ['Firefighting Equipment', 'extservice', 'All firefighting equipment serviced by a competent person'],
+    ['Miscellaneous', 'risingmain', 'Dry / wet rising mains tested by a competent person'],
+    ['Miscellaneous', 'smokevent', 'Smoke and heat ventilation tested by a competent person'],
+    ['Miscellaneous', 'access', 'External access for the fire service still available'],
+    ['Miscellaneous', 'switches', "Firefighters' switches tested"],
+    ['Miscellaneous', 'bypass', 'Fire hydrant bypass flow valve tested by a competent person'],
+    ['Miscellaneous', 'fesigns', 'Fire engine direction signs in place']
+  ]
+};
+
+/* ---------- Fire safety systems on a site (what is installed, who maintains it, what records exist).
+   'ask' is how the question is put to the client in an information request. ---------- */
+const YNU = ['Yes', 'No', 'Not Known'];
+const SYSTEM_GROUPS = [
+  { key: 'alarm', title: 'Fire Alarm And Detection', fields: [
+    { key: 'present', label: 'Fire Alarm System Installed', type: 'select', options: YNU, ask: 'Is there a fire alarm system?' },
+    { key: 'type', label: 'System Type', type: 'select', options: ['Conventional', 'Addressable', 'Wireless', 'Hybrid (Wired + Wireless)', 'Interlinked Domestic Alarms (BS 5839-6)', 'Manual Only (Call Points / Bells)', 'Not Known'], ask: 'What type of system is it (conventional, addressable or wireless)?' },
+    { key: 'category', label: 'BS 5839-1 Category', type: 'select', options: ['M (Manual Only)', 'L1', 'L2', 'L3', 'L4', 'L5', 'P1', 'P2', 'Not Known'], ask: 'What category is the system designed to (e.g. L2, L3, M)? This is on the installation or commissioning certificate.' },
+    { key: 'panel', label: 'Panel Make And Model', type: 'text', ask: 'What is the make and model of the fire alarm panel?' },
+    { key: 'panelLocation', label: 'Panel Location', type: 'text', ask: 'Where is the fire alarm panel?' },
+    { key: 'zones', label: 'Number Of Zones', type: 'number', ask: 'How many zones does the system have?' },
+    { key: 'zonePlan', label: 'Zone Plan Displayed At Panel', type: 'select', options: YNU, ask: 'Is a zone plan displayed next to the panel?' },
+    { key: 'detectors', label: 'Detector Types', type: 'text', placeholder: 'e.g. smoke in offices, heat in workshop, beam in roof', ask: 'What detectors are fitted, and where (smoke, heat, beam detectors)?' },
+    { key: 'notCovered', label: 'Areas Without Detection', type: 'text', ask: 'Are there any areas without automatic detection (e.g. the workshop, stores, roof voids)?' },
+    { key: 'monitored', label: 'Monitored By Alarm Receiving Centre', type: 'select', options: YNU, ask: 'Is the alarm monitored by an alarm receiving centre? If so, which company?' },
+    { key: 'monitoringCo', label: 'Monitoring Company', type: 'text' },
+    { key: 'linked', label: 'Linked Systems', type: 'text', placeholder: 'e.g. door holders, maglocks release, gas / plant shut-off', ask: 'Does the alarm release door holders or magnetic locks, or shut down plant or gas?' },
+    { key: 'maintainer', label: 'Maintained By', type: 'text', ask: 'Which company services the fire alarm, and who is the contact?' },
+    { key: 'lastService', label: 'Last Service Date', type: 'date', ask: 'When was the fire alarm last serviced? Please send the latest service certificate.' },
+    { key: 'serviceMonths', label: 'Serviced Every (Months)', type: 'select', options: ['3', '6', '12'], ask: '' },
+    { key: 'weeklyTests', label: 'Weekly Call Point Tests Recorded', type: 'select', options: YNU, ask: 'Is the alarm tested weekly from a different call point, and recorded in a log book?' },
+    { key: 'certificate', label: 'Installation / Commissioning Certificate Seen', type: 'select', options: YNU, ask: 'Do you hold the installation and commissioning certificates for the system?' },
+    { key: 'falseAlarms', label: 'False Alarms In Last 12 Months', type: 'number', ask: 'How many false alarms have there been in the last 12 months?' },
+    { key: 'defects', label: 'Known Faults Or Defects', type: 'textarea', ask: 'Are there any known faults, or items flagged on the last service report?' }
+  ] },
+  { key: 'el', title: 'Emergency Lighting', fields: [
+    { key: 'present', label: 'Emergency Lighting Installed', type: 'select', options: YNU, ask: 'Is emergency lighting installed?' },
+    { key: 'type', label: 'System Type', type: 'select', options: ['Self-Contained Fittings', 'Central Battery', 'Mixed', 'Not Known'], ask: 'Are the emergency lights self-contained fittings or run from a central battery?' },
+    { key: 'modes', label: 'Fittings', type: 'text', placeholder: 'e.g. non-maintained bulkheads, maintained exit signs', ask: 'Which fittings are maintained (always lit) and which non-maintained?' },
+    { key: 'duration', label: 'Rated Duration', type: 'select', options: ['3 Hours', '1 Hour', 'Not Known'], ask: 'What is the rated duration (1 or 3 hours)?' },
+    { key: 'count', label: 'Number Of Fittings', type: 'number', ask: 'Roughly how many emergency light fittings and illuminated exit signs are there?' },
+    { key: 'testMethod', label: 'Test Method', type: 'select', options: ['Key Switches', 'Self-Test Fittings', 'Addressable / Automatic Monitoring', 'Not Known'], ask: 'How are they tested: test key switches, self-test fittings or an automatic monitoring system? Where are the key switches?' },
+    { key: 'keySwitches', label: 'Test Key Switch Locations', type: 'text' },
+    { key: 'monthlyTests', label: 'Monthly Function Tests Recorded', type: 'select', options: YNU, ask: 'Are monthly function tests carried out and recorded?' },
+    { key: 'lastAnnual', label: 'Last Annual Full-Duration Test', type: 'date', ask: 'When was the last annual full-duration (3-hour) test? Please send the certificate.' },
+    { key: 'maintainer', label: 'Maintained By', type: 'text', ask: 'Which company maintains the emergency lighting?' },
+    { key: 'certificate', label: 'BS 5266 Completion Certificate Seen', type: 'select', options: YNU, ask: 'Do you hold the emergency lighting completion / installation certificate (BS 5266-1)?' },
+    { key: 'defects', label: 'Known Faults Or Defects', type: 'textarea', ask: 'Are any emergency lights known to be faulty?' }
+  ] },
+  { key: 'other', title: 'Other Fire Safety Equipment And Records', fields: [
+    { key: 'extMaintainer', label: 'Extinguishers Serviced By', type: 'text', ask: 'Which company services the fire extinguishers, and when was the last service?' },
+    { key: 'extLastService', label: 'Last Extinguisher Service', type: 'date' },
+    { key: 'sprinklers', label: 'Sprinklers / Suppression', type: 'select', options: YNU, ask: 'Are there any sprinklers or fixed fire suppression systems (e.g. kitchen or server room)?' },
+    { key: 'hoseReels', label: 'Hose Reels / Dry Riser', type: 'select', options: YNU, ask: 'Are there any hose reels, or a dry / wet riser?' },
+    { key: 'smokeVents', label: 'Smoke Vents / AOVs', type: 'select', options: YNU, ask: 'Are there any automatic smoke vents?' },
+    { key: 'logbook', label: 'Fire Log Book Kept At', type: 'text', ask: 'Where is the fire safety log book kept?' },
+    { key: 'previousFra', label: 'Previous Fire Risk Assessment', type: 'text', placeholder: 'Date and who did it', ask: 'When was the last fire risk assessment, and who carried it out? Please send a copy.' },
+    { key: 'eicr', label: 'Last EICR (Fixed Wiring)', type: 'date', ask: 'When was the fixed electrical installation last inspected (EICR)?' },
+    { key: 'gas', label: 'Last Gas Safety Check', type: 'date', ask: 'When were the gas appliances / heaters last serviced (if any)?' },
+    { key: 'marshals', label: 'Fire Marshals / Wardens', type: 'text', ask: 'Who are your nominated fire marshals or wardens?' },
+    { key: 'lastDrill', label: 'Last Fire Drill', type: 'date', ask: 'When was the last fire drill?' },
+    { key: 'peeps', label: 'People Needing Help To Escape (PEEPs)', type: 'text', ask: 'Does anyone need help to evacuate (personal emergency evacuation plans)?' }
+  ] }
+];
 
 /* ---------- Health & Safety Risk Assessment (HSE five steps) ---------- */
 const HS_INFO = [

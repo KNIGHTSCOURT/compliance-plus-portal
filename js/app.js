@@ -142,15 +142,21 @@ function viewDue() {
   const rows = Store.list('items').filter(i => !i.archived).map(it => ({ it, st: itemState(it) }))
     .filter(x => x.st.due && x.st.due <= horizon).sort((a, b) => a.st.due.localeCompare(b.st.due));
   const never = Store.list('items').filter(i => !i.archived && !lastInspection(i.id));
-  const reviews = Store.list('assessments').filter(a => a.reviewDate && a.reviewDate <= horizon).sort((a, b) => a.reviewDate.localeCompare(b.reviewDate));
+  // Only the latest assessment / maintenance check of each kind per site counts towards what's due.
+  const latestOf = {};
+  for (const a of Store.list('assessments')) {
+    const key = `${a.siteId}|${a.kind}|${a.kind === 'log' ? a.frequency : ''}`;
+    if (!latestOf[key] || (a.date || '') > (latestOf[key].date || '')) latestOf[key] = a;
+  }
+  const reviews = Object.values(latestOf).filter(a => a.reviewDate && a.reviewDate <= horizon).sort((a, b) => a.reviewDate.localeCompare(b.reviewDate));
   const where = it => { const s = siteOf(it); const c = s ? Store.get('clients', s.clientId) : null; return `${c ? c.name + ' · ' : ''}${s ? s.name : ''}`; };
   $('#view').innerHTML = `<h1>Due &amp; Overdue</h1><p class="muted">Items due for inspection in the next 60 days, plus anything overdue.</p>
     <div class="table-wrap"><table class="list"><thead><tr><th>Due</th><th>Ref</th><th>Item</th><th>Client · Site</th><th>Location</th><th>Last Result</th><th></th></tr></thead><tbody>
     ${rows.map(({ it, st }) => `<tr class="click" data-href="#/item/${it.id}"><td>${dueBadge(st)}</td><td>${typeChip(it.type)} <b>${esc(it.ref)}</b></td><td>${esc(itemTitle(it))}</td>
       <td>${esc(where(it))}</td><td>${esc(locationText(it, true))}</td><td>${outcomeBadge(st.outcome)}</td><td><a class="btn small primary" href="#/inspect/${it.id}">Inspect</a></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Nothing due.</td></tr>'}
     </tbody></table></div>
-    ${reviews.length ? `<h2 class="mt">Risk Assessment Reviews</h2><div class="table-wrap"><table class="list"><tbody>${reviews.map(a => `<tr class="click" data-href="#/assessment/${a.id}">
-      <td>${a.reviewDate < today() ? `<span class="badge b-overdue">${esc(fmtDate(a.reviewDate))}</span>` : esc(fmtDate(a.reviewDate))}</td><td>${a.kind === 'fra' ? 'Fire Risk Assessment' : 'H&amp;S Risk Assessment'}</td><td>${esc((Store.get('sites', a.siteId) || {}).name || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${reviews.length ? `<h2 class="mt">Risk Assessment Reviews &amp; Maintenance Checks</h2><div class="table-wrap"><table class="list"><tbody>${reviews.map(a => `<tr class="click" data-href="#/assessment/${a.id}">
+      <td>${a.reviewDate < today() ? `<span class="badge b-overdue">${esc(fmtDate(a.reviewDate))}</span>` : esc(fmtDate(a.reviewDate))}</td><td>${a.kind === 'log' ? 'Maintenance Check Due' : a.kind === 'fra' ? 'Fire Risk Assessment Review' : 'H&amp;S Risk Assessment Review'}</td><td>${esc((Store.get('sites', a.siteId) || {}).name || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${never.length ? `<h2 class="mt">Never Inspected (${never.length})</h2><div class="table-wrap"><table class="list"><tbody>${never.slice(0, 100).map(it => `<tr class="click" data-href="#/item/${it.id}">
       <td>${typeChip(it.type)} <b>${esc(it.ref)}</b></td><td>${esc(itemTitle(it))}</td><td>${esc(where(it))}</td><td><a class="btn small primary" href="#/inspect/${it.id}">Inspect</a></td></tr>`).join('')}</tbody></table></div>` : ''}`;
   bindRowLinks();

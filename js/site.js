@@ -122,7 +122,7 @@ function viewSite(id, tab = 'plan') {
   if (!site) return notFound();
   const client = Store.get('clients', site.clientId) || { name: 'Client' };
   setCrumbs([['Clients & Sites', '#/clients'], [client.name, `#/client/${client.id}`], [site.name]]);
-  const tabs = [['plan', 'Plan & 3D'], ['items', 'Items'], ['assess', 'Risk Assessments'], ['reports', 'Reports & QR Labels']];
+  const tabs = [['plan', 'Plan & 3D'], ['items', 'Items'], ['systems', 'Fire Systems'], ['assess', 'Assessments & Checks'], ['reports', 'Reports & QR Labels']];
   $('#view').innerHTML = `
     <div class="spread"><div><h1>${esc(site.name)}</h1>
       <div class="muted">${esc([site.address, site.postcode].filter(Boolean).join(', '))}${site.buildingUse ? ' · ' + esc(site.buildingUse) : ''}</div></div>
@@ -139,6 +139,7 @@ function viewSite(id, tab = 'plan') {
   const body = $('#tabBody');
   if (tab === 'items') renderItemsTab(site, body);
   else if (tab === 'assess') renderAssessTab(site, body);
+  else if (tab === 'systems') renderSystemsTab(site, body);
   else if (tab === 'reports') renderReportsTab(site, body);
   else renderPlanTab(site, body);
 }
@@ -506,22 +507,122 @@ function renderItemsTab(site, root) {
   draw();
 }
 
+/* ---------- Fire systems tab ---------- */
+function systemsUnknown(site) {
+  const s = site.systems || {};
+  const out = [];
+  for (const g of SYSTEM_GROUPS) {
+    const vals = s[g.key] || {};
+    const absent = vals.present === 'No';
+    for (const f of g.fields) {
+      if (!f.ask) continue;
+      if (absent && f.key !== 'present') continue;
+      const v = vals[f.key];
+      if (v === undefined || v === '' || v === 'Not Known') out.push({ group: g.title, ask: f.ask });
+    }
+  }
+  return out;
+}
+
+function systemsPlanCounts(site) {
+  const items = Store.list('items').filter(i => i.siteId === site.id && !i.archived);
+  const tally = (type, key) => {
+    const t = {};
+    for (const i of items.filter(i => i.type === type)) { const k = (i.details || {})[key] || 'Type Not Recorded'; t[k] = (t[k] || 0) + 1; }
+    return Object.entries(t).map(([k, n]) => `${n} × ${k}`).join(', ');
+  };
+  return { alarm: tally('alarm', 'device'), el: tally('emergency-light', 'fitting'), ext: tally('extinguisher', 'medium') };
+}
+
+function renderSystemsTab(site, root) {
+  site.systems = site.systems || {};
+  const S = site.systems;
+  const ro = Cloud.isClient();
+  const counts = systemsPlanCounts(site);
+  const nextService = S.alarm && S.alarm.lastService ? addMonths(S.alarm.lastService, Number(S.alarm.serviceMonths) || 6) : null;
+  const nextEl = S.el && S.el.lastAnnual ? addMonths(S.el.lastAnnual, 12) : null;
+  const dueTxt = d => d ? (d < today() ? `<span class="badge b-overdue">Overdue · ${fmtDate(d)}</span>` : `<span class="badge b-pass">Next ${fmtDate(d)}</span>`) : '';
+  const unknown = systemsUnknown(site);
+  const control = (g, f) => {
+    const v = (S[g.key] || {})[f.key] ?? '';
+    const name = `${g.key}.${f.key}`;
+    if (ro) return `<div class="field"><label>${esc(f.label)}</label><div>${esc(v === '' ? '—' : f.type === 'date' ? fmtDate(v) : v)}</div></div>`;
+    if (f.type === 'select') return field(f.label, name, v, { type: 'select', options: f.options });
+    if (f.type === 'textarea') return field(f.label, name, v, { type: 'textarea', placeholder: f.placeholder });
+    return field(f.label, name, v, { type: f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text', placeholder: f.placeholder });
+  };
+  root.innerHTML = `
+    <div class="card staff-only"><div class="spread"><div><h2 style="margin:0">Information Still Needed</h2>
+      <p class="small muted" style="margin:4px 0 0">${unknown.length ? `${unknown.length} question${unknown.length === 1 ? '' : 's'} still to answer. Send them to the client, or to their maintenance contractor.` : 'Everything on this page has been answered.'}</p></div>
+      ${unknown.length ? '<div class="row"><button class="btn primary" id="askEmail">Email Questions To Client</button><button class="btn" id="askPrint">Print Questions</button></div>' : ''}</div></div>
+    <div class="card"><div class="spread"><h2 style="margin:0">Fire Alarm And Detection</h2>${dueTxt(nextService)}</div>
+      <p class="small muted">On the plan: ${esc(counts.alarm || 'no alarm devices placed yet')}.</p>
+      <div class="grid3" id="sys-alarm">${SYSTEM_GROUPS[0].fields.map(f => control(SYSTEM_GROUPS[0], f)).join('')}</div></div>
+    <div class="card"><div class="spread"><h2 style="margin:0">Emergency Lighting</h2>${dueTxt(nextEl)}</div>
+      <p class="small muted">On the plan: ${esc(counts.el || 'no emergency lights placed yet')}.</p>
+      <div class="grid3" id="sys-el">${SYSTEM_GROUPS[1].fields.map(f => control(SYSTEM_GROUPS[1], f)).join('')}</div></div>
+    <div class="card"><h2>Other Fire Safety Equipment And Records</h2>
+      <p class="small muted">Extinguishers on the plan: ${esc(counts.ext || 'none placed yet')}.</p>
+      <div class="grid3" id="sys-other">${SYSTEM_GROUPS[2].fields.map(f => control(SYSTEM_GROUPS[2], f)).join('')}</div></div>
+    ${ro ? '' : '<p class="small muted">Changes save automatically.</p>'}`;
+  if (ro) return;
+  let timer = null;
+  $$('[name]', root).forEach(el => {
+    const evt = el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input';
+    el.addEventListener(evt, () => {
+      const [g, k] = el.name.split('.');
+      S[g] = S[g] || {};
+      S[g][k] = el.value.trim();
+      clearTimeout(timer);
+      timer = setTimeout(() => { Store.upsert('sites', site); if (el.tagName === 'SELECT' || el.type === 'date') { const y = window.scrollY; renderSystemsTab(site, root); window.scrollTo(0, y); } }, 400);
+    });
+  });
+  const client = Store.get('clients', site.clientId) || {};
+  const s = Store.settings;
+  const questionList = () => {
+    let last = '', n = 0;
+    return unknown.map(u => { const head = u.group !== last ? `\n${u.group}\n` : ''; last = u.group; return `${head}${++n}. ${u.ask}`; }).join('\n');
+  };
+  const askEmail = $('#askEmail', root);
+  if (askEmail) askEmail.onclick = () => {
+    const body = `Hello${client.contact ? ' ' + client.contact.split(' ')[0] : ''},\n\nAhead of the fire safety inspection at ${site.name}, could you help with the questions below about your fire alarm, emergency lighting and other fire safety equipment? Copies of the latest service certificates and the fire log book would also be very helpful. If you don't know the answer, your fire alarm or electrical maintenance company should be able to tell you.\n${questionList()}\n\nMany thanks,\n${s.assessorName || ''}\n${s.businessName}${s.phone ? '\n' + s.phone : ''}`;
+    const href = `mailto:${encodeURIComponent(client.email || '')}?subject=${encodeURIComponent(`Fire safety information for ${site.name}`)}&body=${encodeURIComponent(body)}`;
+    if (href.length > 1900) {
+      openModal({ title: 'Questions For The Client', wide: true, body: `<p class="small">This is too long for some email programs to open directly. Copy it into an email instead.</p><textarea style="min-height:360px" id="askText">${esc(body)}</textarea>`,
+        buttons: [{ label: 'Close' }, { label: 'Copy Text', cls: 'primary', onClick: () => { navigator.clipboard.writeText(body).then(() => toast('Copied')); return false; } }] });
+    } else location.href = href;
+  };
+  const askPrint = $('#askPrint', root);
+  if (askPrint) askPrint.onclick = () => {
+    let last = '';
+    const rows = unknown.map((u, i) => { const head = u.group !== last ? `<h3>${esc(u.group)}</h3>` : ''; last = u.group;
+      return `${head}<div style="page-break-inside:avoid;margin:0 0 4mm"><b>${i + 1}.</b> ${esc(u.ask)}<div style="border-bottom:1px solid #999;height:9mm"></div><div style="border-bottom:1px solid #999;height:8mm"></div></div>`; }).join('');
+    showPrint(`<div class="report"><div class="page"><div style="font-weight:700;color:var(--navy)">${esc(s.businessName)}</div>
+      <h1>Fire Safety Information Request</h1><p><b>${esc(client.name || '')}</b> — ${esc(site.name)}${site.address ? ', ' + esc(site.address) : ''}</p>
+      <p class="small">Please answer what you can and return this sheet, with copies of your latest fire alarm and emergency lighting service certificates and your fire log book. Your maintenance contractor can help with the technical questions.</p>
+      ${rows}<p class="small mt">Completed by: ______________________ &nbsp; Date: ____________</p></div></div>`, { title: `${site.name} - Fire Safety Information Request` });
+  };
+}
+
 /* ---------- Risk assessments tab ---------- */
 function renderAssessTab(site, root) {
   const list = Store.list('assessments').filter(a => a.siteId === site.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   root.innerHTML = `
-    <div class="row mb staff-only"><button class="btn primary" id="newFra">+ Fire Risk Assessment</button><button class="btn primary" id="newHs">+ Health &amp; Safety Risk Assessment</button></div>
+    <div class="row mb staff-only"><button class="btn primary" id="newFra">+ Fire Risk Assessment</button><button class="btn primary" id="newHs">+ Health &amp; Safety Risk Assessment</button><button class="btn" id="newLog">+ Maintenance Check</button></div>
     ${list.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Assessment</th><th>Date</th><th>Assessor</th><th>Status</th><th>Risk</th><th>Open Actions</th><th>Review Date</th></tr></thead><tbody>
     ${list.map(a => {
-      const risk = a.kind === 'fra' ? FRA_MATRIX[`${a.likelihood}|${a.consequence}`] || '' : (() => { const max = Math.max(0, ...(a.hazards || []).map(h => (+h.l || 0) * (+h.s || 0))); return max ? hsBand(max) : ''; })();
-      const open = a.kind === 'fra' ? (a.actions || []).filter(x => !x.done).length : (a.hazards || []).filter(h => h.action && !h.done).length;
-      return `<tr class="click" data-href="#/assessment/${a.id}"><td><b>${a.kind === 'fra' ? 'Fire Risk Assessment' : 'Health & Safety Risk Assessment'}</b><div class="small muted">${esc(a.title || '')}</div></td>
-        <td>${esc(fmtDate(a.date))}</td><td>${esc(a.assessor || '')}</td><td>${esc(a.status || 'Draft')}</td>
+      const logIssues = a.kind === 'log' ? maintChecksFor(a.frequency || 'weekly', a.cumulative !== false).reduce((n, g) => n + g.checks.filter(c => (((a.answers || {})[g.freq] || {})[c[1]] || {}).v === 'no').length, 0) : 0;
+      const risk = a.kind === 'fra' ? FRA_MATRIX[`${a.likelihood}|${a.consequence}`] || '' : a.kind === 'log' ? '' : (() => { const max = Math.max(0, ...(a.hazards || []).map(h => (+h.l || 0) * (+h.s || 0))); return max ? hsBand(max) : ''; })();
+      const open = a.kind === 'fra' ? (a.actions || []).filter(x => !x.done).length : a.kind === 'log' ? logIssues : (a.hazards || []).filter(h => h.action && !h.done).length;
+      const label = a.kind === 'log' ? `Maintenance Check — ${(MAINT_FREQ.find(f => f[0] === a.frequency) || MAINT_FREQ[1])[1]}` : ASSESS_TITLES[a.kind] || 'Assessment';
+      return `<tr class="click" data-href="#/assessment/${a.id}"><td><b>${esc(label)}</b><div class="small muted">${esc(a.title || '')}</div></td>
+        <td>${esc(fmtDate(a.date))}</td><td>${esc(a.assessor || '')}</td><td>${a.kind === 'log' ? 'Done' : esc(a.status || 'Draft')}</td>
         <td>${risk ? `<span class="badge risk-${risk.replace(/\s/g, '')}">${esc(risk)}</span>` : '—'}</td><td>${open}</td>
         <td>${a.reviewDate && a.reviewDate < today() ? `<span class="badge b-overdue">${esc(fmtDate(a.reviewDate))}</span>` : esc(fmtDate(a.reviewDate))}</td></tr>`;
-    }).join('')}</tbody></table></div>` : `<div class="card empty"><h3>No Risk Assessments Yet</h3><p>Start a fire risk assessment (PAS 79 layout) or a health &amp; safety risk assessment (HSE five steps) for this site.</p></div>`}`;
+    }).join('')}</tbody></table></div>` : `<div class="card empty"><h3>No Risk Assessments Yet</h3><p>Start a fire risk assessment (PAS 79 layout), a health &amp; safety risk assessment (HSE five steps), or record a fire safety maintenance check for this site.</p></div>`}`;
   $('#newFra').onclick = () => go(`#/assessment/${newAssessment(site, 'fra').id}`);
   $('#newHs').onclick = () => go(`#/assessment/${newAssessment(site, 'hs').id}`);
+  $('#newLog').onclick = () => go(`#/assessment/${newAssessment(site, 'log').id}`);
   bindRowLinks();
 }
 
@@ -540,7 +641,7 @@ function renderReportsTab(site, root) {
         <div class="grid2">${field('Inspections From', 'from', addMonths(lastDate, -3), { type: 'date' })}${field('Inspections To', 'to', lastDate, { type: 'date' })}</div>
         <div class="grid2">${field('Inspected By', 'assessor', Store.settings.assessorName)}${field('Recommended Next Visit', 'nextVisit', addMonths(lastDate, 6), { type: 'date' })}</div>
         <label>Include</label>
-        <div class="grid2">${ck('plans', 'Floor Plans')}${ck('threeD', '3D Building View')}${ck('doors', 'Fire Door Schedule')}${ck('pat', 'PAT Register')}${ck('other', 'Other Equipment')}${ck('defects', 'Defects & Actions')}${ck('photos', 'Photographs')}</div>
+        <div class="grid2">${ck('plans', 'Floor Plans')}${ck('threeD', '3D Building View')}${ck('doors', 'Fire Door Schedule')}${ck('pat', 'PAT Register')}${ck('other', 'Other Equipment')}${ck('defects', 'Defects & Actions')}${ck('photos', 'Photographs')}${ck('logs', 'Maintenance Checks')}${ck('systems', 'Fire Safety Systems')}</div>
         <div class="grid2 mt">${field('Fire Risk Assessment', 'fraId', fras[0] ? fras[0].id : '', { type: 'select', options: fras.map(a => [a.id, `${fmtDate(a.date)} — ${a.status || 'Draft'}`]), hint: 'Leave blank to leave it out' })}
           ${field('H&S Risk Assessment', 'hsId', hss[0] ? hss[0].id : '', { type: 'select', options: hss.map(a => [a.id, `${fmtDate(a.date)} — ${a.status || 'Draft'}`]) })}</div>
         ${field("Assessor's Comments (Summary Page)", 'summary', '', { type: 'textarea' })}
@@ -567,7 +668,7 @@ function renderReportsTab(site, root) {
       const html = await buildReport(site.id, {
         title: v.title, from: v.from, to: v.to, assessor: v.assessor, nextVisit: v.nextVisit, summary: v.summary,
         fraId: v.fraId, hsId: v.hsId,
-        sections: { plans: v.plans, threeD: v.threeD, doors: v.doors, pat: v.pat, other: v.other, defects: v.defects, photos: v.photos }
+        sections: { plans: v.plans, threeD: v.threeD, doors: v.doors, pat: v.pat, other: v.other, defects: v.defects, photos: v.photos, logs: v.logs, systems: v.systems }
       });
       const client = Store.get('clients', site.clientId) || {};
       showPrint(html, { title: `${client.name ? client.name + ' - ' : ''}${site.name} - Report ${today()}` });

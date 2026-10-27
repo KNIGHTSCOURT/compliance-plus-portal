@@ -197,11 +197,38 @@ async function buildReport(siteId, opts) {
     pages.push(html + '</div>');
   }
 
+  // Fire safety systems recorded for the site
+  const sys = site.systems || {};
+  if (sec.systems !== false && SYSTEM_GROUPS.some(g => Object.values(sys[g.key] || {}).some(v => v))) {
+    pages.push(`<div class="page"><h2>${N()}. Fire Safety Systems</h2>
+      ${SYSTEM_GROUPS.map(g => {
+        const vals = sys[g.key] || {};
+        const rows = g.fields.filter(f => vals[f.key]).map(f => `<tr><th style="width:62mm">${esc(f.label)}</th><td>${esc(f.type === 'date' ? fmtDate(vals[f.key]) : vals[f.key])}</td></tr>`).join('');
+        return rows ? `<h3>${esc(g.title)}</h3><table>${rows}</table>` : '';
+      }).join('')}
+      <p class="small">Information provided by the client or seen on site at the time of the inspection.</p></div>`);
+  }
+
   // Risk assessments
   const fra = opts.fraId ? Store.get('assessments', opts.fraId) : null;
   if (fra) pages.push(fraReportHtml(fra, N()));
   const hs = opts.hsId ? Store.get('assessments', opts.hsId) : null;
   if (hs) pages.push(hsReportHtml(hs, N()));
+
+  // Maintenance checks: the latest of each type up to the report date
+  if (sec.logs) {
+    const logs = Store.list('assessments').filter(x => x.siteId === siteId && x.kind === 'log' && x.date <= to);
+    const latest = MAINT_FREQ.map(f => logs.filter(x => x.frequency === f[0]).sort((p, q) => q.date.localeCompare(p.date))[0]).filter(Boolean);
+    if (latest.length) {
+      const nn = N();
+      pages.push(`<div class="page"><h2>${nn}. Fire Safety Maintenance Checks</h2>
+        <table><tr><th>Check</th><th>Last Done</th><th>By</th><th>Issues Found</th><th>Next Due</th></tr>
+        ${latest.map(l => {
+          const issues = maintChecksFor(l.frequency, l.cumulative !== false).flatMap(g => g.checks.filter(c => (((l.answers || {})[g.freq] || {})[c[1]] || {}).v === 'no').map(c => c[2] + (((l.answers[g.freq] || {})[c[1]] || {}).note ? ` (${l.answers[g.freq][c[1]].note})` : '')));
+          return `<tr><td>${esc((MAINT_FREQ.find(f => f[0] === l.frequency) || [])[1] || '')}</td><td>${esc(fmtDate(l.date))}</td><td>${esc(l.assessor || '')}</td><td>${issues.length ? esc(issues.join('; ')) : 'None'}</td><td>${l.reviewDate && l.reviewDate < today() ? '<b style="color:#d64545">Overdue</b> ' : ''}${esc(fmtDate(l.reviewDate))}</td></tr>`;
+        }).join('')}</table></div>`);
+    }
+  }
 
   // Sign off
   pages.push(`<div class="page"><h2>Declaration And Limitations</h2>
@@ -218,15 +245,87 @@ async function buildReport(siteId, opts) {
   return `<div class="report">${pages.join('')}</div>`;
 }
 
+/* Rough floor area from the plan: the walls' outline, or the rooms drawn. Can be overridden in the FRA. */
+function estimateFloorArea(f) {
+  const ws = f.walls || [];
+  if (ws.length) {
+    const xs = ws.flatMap(w => [w[0], w[2]]), ys = ws.flatMap(w => [w[1], w[3]]);
+    return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+  }
+  return (f.rooms || []).filter(r => r.lx == null).reduce((s, r) => s + r.w * r.d, 0);
+}
+
+/* Escape route and extinguisher checks against the HM Government guides' suggested figures. */
+function fraGuideResults(a, site) {
+  const e = a.escape || {};
+  const level = e.level || 'normal';
+  const routes = e.routes === 'single' ? 'single' : 'multiple';
+  const seated = a.premisesType === 'transport' && e.seated === 'yes';
+  const limit = (seated ? TRAVEL_LIMITS.seated : TRAVEL_LIMITS.other)[routes][level];
+  const travel = e.travel === '' || e.travel == null ? null : Number(e.travel);
+  const widths = String(e.exits || '').split(/[,;\s]+/).map(Number).filter(n => n > 0);
+  const exits = widths.map(w => ({ w, cap: exitCapacity(w, level), discounted: false }));
+  if (exits.length > 1) exits.reduce((m, x) => (x.cap > m.cap ? x : m), exits[0]).discounted = true;
+  const usable = exits.filter(x => !x.discounted).reduce((s, x) => s + x.cap, 0);
+  const occupants = Number(e.occupants) || null;
+  const floors = [...((site && site.floors) || [])].sort((x, y) => (x.level || 0) - (y.level || 0)).map(f => {
+    const ext = Store.list('items').filter(i => i.floorId === f.id && i.type === 'extinguisher' && !i.archived && (i.details || {}).medium !== 'Fire Blanket');
+    const given = Number(((e.areas || {})[f.id]));
+    const area = given || estimateFloorArea(f);
+    const need = extinguishersNeeded(area);
+    const placed = ext.filter(i => i.x != null);
+    const far = placed.length ? (f.rooms || []).filter(r => {
+      const px = r.lx != null ? r.lx : r.x + r.w / 2, py = r.ly != null ? r.ly : r.y + r.d / 2;
+      return Math.min(...placed.map(i => Math.hypot(i.x - px, i.y - py))) > EXTINGUISHER_MAX_TRAVEL;
+    }).map(r => r.name) : [];
+    return { floor: f, area, areaEstimated: !given, need, have: ext.length, ok: need ? ext.length >= need : null, far };
+  });
+  return {
+    level, routes, seated, limit, travel, travelOk: travel == null || Number.isNaN(travel) ? null : travel <= limit,
+    exits, usable, occupants, capOk: occupants && exits.length ? usable >= occupants : null, floors
+  };
+}
+
+function fraGuideReportHtml(a) {
+  const site = Store.get('sites', a.siteId);
+  const g = fraGuideResults(a, site);
+  const yn = ok => ok == null ? '—' : ok ? '<b style="color:#2e9e5b">Within guide</b>' : '<b style="color:#d64545">Outside guide</b>';
+  return `<h3>Escape Routes And Extinguishers — Guide Checks</h3>
+    <p class="small">Compared with the suggested figures in the ${esc(FRA_GUIDE_REF)}. These figures are flexible and depend on the overall risk.</p>
+    <table>
+      <tr><th style="width:55mm">Fire Risk Level</th><td>${esc((FRA_RISK_LEVELS.find(r => r[0] === g.level) || [])[1] || '')}</td></tr>
+      <tr><th>Escape Routes</th><td>${g.routes === 'single' ? 'Only one route' : 'More than one route'}${g.seated ? ' · seating in rows' : ''}</td></tr>
+      <tr><th>Travel Distance</th><td>${g.travel == null ? 'Not measured' : `${g.travel} m`} — suggested maximum ${g.limit} m. ${yn(g.travelOk)}</td></tr>
+      ${g.exits.length ? `<tr><th>Exits (Clear Width)</th><td>${g.exits.map(x => `${x.w} mm (${x.cap} people${x.discounted ? ', discounted as widest' : ''})`).join('; ')}</td></tr>
+      <tr><th>Exit Capacity</th><td>${g.usable} people${g.occupants ? ` for up to ${g.occupants} people — ${yn(g.capOk)}` : ''}</td></tr>` : ''}
+    </table>
+    ${g.floors.length ? `<table><tr><th>Floor</th><th>Area (m²)</th><th>Extinguishers Suggested</th><th>Found</th><th>Notes</th></tr>
+      ${g.floors.map(f => `<tr><td>${esc(f.floor.name)}</td><td>${Math.round(f.area) || '—'}${f.areaEstimated ? ' (est.)' : ''}</td><td>${f.need}</td><td>${f.have}</td><td>${f.ok == null ? '' : f.ok ? 'Sufficient number' : `Add ${f.need - f.have}`}${f.far.length ? `; over ${EXTINGUISHER_MAX_TRAVEL} m from an extinguisher: ${esc(f.far.join(', '))}` : ''}</td></tr>`).join('')}
+    </table>` : ''}`;
+}
+
+function logReportHtml(a, n) {
+  const groups = maintChecksFor(a.frequency || 'weekly', a.cumulative !== false);
+  const freqLabel = (MAINT_FREQ.find(f => f[0] === a.frequency) || MAINT_FREQ[1])[1];
+  return `<div class="page"><h2>${n}. Fire Safety Maintenance Check — ${esc(freqLabel)}</h2>
+    <p class="small">Checked ${esc(fmtDate(a.date))} by ${esc(a.assessor || '')}. Next check due ${esc(fmtDate(a.reviewDate))}. Based on the example maintenance checklist in the ${esc(FRA_GUIDE_REF)}.</p>
+    ${groups.map(g => `<h3>${esc(g.label)} Checks</h3><table><tr><th>Area</th><th>Check</th><th style="width:14mm">Result</th><th>Comments</th></tr>
+      ${g.checks.map(([sec, k, q]) => { const ans = ((a.answers || {})[g.freq] || {})[k] || {}; const v = (ans.v || '').toUpperCase();
+        return `<tr><td>${esc(sec)}</td><td>${esc(q)}</td><td><b style="color:${ans.v === 'no' ? '#d64545' : 'inherit'}">${esc(v)}</b></td><td>${esc(ans.note || '')}</td></tr>`; }).join('')}</table>`).join('')}
+    ${a.notes ? `<h3>Notes</h3><p>${esc(a.notes).replace(/\n/g, '<br>')}</p>` : ''}</div>`;
+}
+
 function fraReportHtml(a, n) {
   const rating = FRA_MATRIX[`${a.likelihood}|${a.consequence}`];
+  const ptype = (FRA_PREMISES.find(p => p[0] === a.premisesType) || [])[1];
   let html = `<div class="page"><h2>${n}. Fire Risk Assessment</h2>
-    <p class="small">Carried out under the Regulatory Reform (Fire Safety) Order 2005, following the structure of PAS 79-1. Assessment date ${esc(fmtDate(a.date))} by ${esc(a.assessor || '')}. Status: ${esc(a.status || 'Draft')}.</p>
-    <table>${FRA_INFO.map(f => `<tr><th style="width:55mm">${esc(f.label)}</th><td>${esc((a.info || {})[f.key] || '')}</td></tr>`).join('')}</table>`;
-  for (const sct of FRA_SECTIONS) {
+    <p class="small">Carried out under the Regulatory Reform (Fire Safety) Order 2005, following the structure of PAS 79-1${ptype && a.premisesType !== 'general' ? ` and the HM Government guide for ${esc(ptype.split(' (')[0])}` : ''}. Assessment date ${esc(fmtDate(a.date))} by ${esc(a.assessor || '')}. Status: ${esc(a.status || 'Draft')}.</p>
+    <table>${ptype ? `<tr><th style="width:55mm">Type Of Premises</th><td>${esc(ptype)}</td></tr>` : ''}${FRA_INFO.map(f => `<tr><th style="width:55mm">${esc(f.label)}</th><td>${esc((a.info || {})[f.key] || '')}</td></tr>`).join('')}</table>`;
+  for (const sct of fraSectionsFor(a)) {
     html += `<h3>${esc(sct.title)}</h3><table><tr><th>Question</th><th style="width:16mm">Answer</th><th>Comments</th></tr>
       ${sct.questions.map(([k, q]) => { const ans = ((a.answers || {})[sct.key] || {})[k] || {}; return `<tr><td>${esc(q)}</td><td><b>${esc((ans.v || '').toUpperCase())}</b></td><td>${esc(ans.note || '')}</td></tr>`; }).join('')}</table>`;
   }
+  if (a.escape) html += fraGuideReportHtml(a);
   html += `<h3>Fire Risk Rating</h3>
     <table><tr><th>Likelihood Of Fire</th><td>${esc(a.likelihood || '')}</td><th>Potential Consequences</th><td>${esc(a.consequence || '')}</td></tr>
     <tr><th>Overall Risk</th><td colspan="3"><span class="badge risk-${esc(rating || '')}">${esc(rating || 'Not Rated')}</span> ${esc(FRA_ACTION_GUIDE[rating] || '')}</td></tr></table>
