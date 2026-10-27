@@ -190,7 +190,7 @@ class Plan3D {
           if (it.x == null) continue;
           const status = statusOf(it);
           const hi = opts.highlightId === it.id;
-          const pinH = it.type === 'fire-door' ? 1.1 : it.type === 'alarm' || it.type === 'emergency-light' ? Math.max(1.4, h - 0.4) : 1.4;
+          const pinH = it.type === 'fire-door' || it.type === 'fire-exit' ? 1.1 : it.type === 'alarm' || it.type === 'emergency-light' ? Math.max(1.4, h - 0.4) : 1.4;
           const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pinH), new THREE.MeshBasicMaterial({ color: 0x34495e }));
           stalk.position.set(it.x, elev + pinH / 2, it.y);
           this.group.add(stalk);

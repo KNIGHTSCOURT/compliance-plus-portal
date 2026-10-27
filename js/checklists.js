@@ -38,6 +38,34 @@ const ITEM_TYPES = {
     ]
   },
 
+  'fire-exit': {
+    label: 'Fire Exit', code: 'EX', color: '#117a65', interval: 12,
+    details: [
+      { key: 'exitType', label: 'Exit Type', type: 'select', options: ['Final Exit Door', 'Escape Route Door', 'Storey Exit', 'Emergency Exit (Not Normally Used)', 'Gate / Outside Route'] },
+      { key: 'hardware', label: 'Opening Device', type: 'select', options: ['Push Bar (Panic Bar)', 'Push Pad', 'Lever Handle', 'Thumb Turn', 'Push Plate', 'Electromagnetic Lock + Release', 'None'] },
+      { key: 'opensOutward', label: 'Opens In Direction Of Escape', type: 'select', options: ['Yes', 'No', 'Not Required'] },
+      { key: 'leadsTo', label: 'Leads To', type: 'text', placeholder: 'e.g. Car park / assembly point at front of building' }
+    ],
+    checks: [
+      { key: 'clearInside', q: 'Route to the exit is clear', help: 'No storage, furniture or obstructions on the escape route inside' },
+      { key: 'clearOutside', q: 'Outside of the exit is clear', help: 'Not blocked by bins, vehicles, deliveries, vegetation or ice' },
+      { key: 'opens', q: 'Opens easily and immediately without a key', help: 'No specialist knowledge needed; one action where possible' },
+      { key: 'hardwareOk', q: 'Panic / emergency hardware works correctly', help: 'Push bar or pad releases fully (BS EN 1125 / BS EN 179)' },
+      { key: 'noLocks', q: 'No padlocks, chains, bolts or extra locks', help: 'Any security devices release automatically when occupied' },
+      { key: 'maglock', q: 'Electric locks release on fire alarm / power loss', help: 'Green break-glass override present and working — N/A if none' },
+      { key: 'direction', q: 'Opens in the direction of escape where required', help: 'Normally needed for more than 60 people or high-risk areas' },
+      { key: 'sign', q: 'Fire exit sign present, correct and visible', help: 'Running-man pictogram; "Push Bar To Open" where fitted' },
+      { key: 'lighting', q: 'Emergency lighting covers the exit', help: 'Inside the door and outside at the final exit' },
+      { key: 'condition', q: 'Door, frame and threshold in good condition', help: 'No trip hazards, damaged steps or sticking door' },
+      { key: 'closes', q: 'Closes and latches securely', help: 'Self-closer works where fitted; not left propped open' },
+      { key: 'safePlace', q: 'Leads to a place of safety', help: 'Route away from the building to the assembly point is clear' }
+    ],
+    readings: [
+      { key: 'releaseForce', label: 'Release Force At Push Bar / Pad (Optional)', unit: 'N', max: 80, note: 'BS EN 1125 limit for panic bars' },
+      { key: 'clearWidth', label: 'Clear Width (Optional)', unit: 'mm', min: 750, note: 'Typical minimum for up to 60 people' }
+    ]
+  },
+
   'pat': {
     label: 'PAT Appliance', code: 'PAT', color: '#2471a3', interval: 12,
     details: [
