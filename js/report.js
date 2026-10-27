@@ -30,6 +30,7 @@ async function photoTags(ids, max = 6) {
 }
 
 function failedChecksText(item, insp) {
+  if (insp.fd) return [...fdFindings(item, insp), ...fdCaveats(item, insp).map(c => 'Could not verify: ' + c)];
   const type = ITEM_TYPES[item.type] || ITEM_TYPES.other;
   const out = [];
   for (const c of type.checks) {
@@ -151,7 +152,7 @@ async function buildReport(siteId, opts) {
         const g = insp ? insp.readings || {} : {};
         return `<tr><td>${itemNo(it)}</td><td>${esc(it.ref)}</td><td>${esc(locationText(it, true))}</td><td>${esc(it.details.rating || '')}</td><td>${esc(it.details.use || '')}</td>
         <td>${insp ? [g.gapHead, g.gapHinge, g.gapLock, g.gapThreshold].map(v => v === undefined || v === '' ? '–' : esc(v)).join(' / ') : ''}</td>
-        <td>${insp ? `<b style="color:${STATUS_COLORS[insp.outcome]}">${OUTCOME_LABEL[insp.outcome]}</b>` : 'Not Inspected'}</td>
+        <td>${insp ? `<b style="color:${STATUS_COLORS[insp.outcome]}">${esc(insp.fd ? insp.fd.result : OUTCOME_LABEL[insp.outcome])}</b>` : 'Not Inspected'}</td>
         <td>${insp ? esc(failedChecksText(it, insp).join('; ')) : ''}</td><td>${insp ? esc(fmtDate(insp.nextDue)) : ''}</td></tr>`;
       }).join('')}</table></div>`);
   }

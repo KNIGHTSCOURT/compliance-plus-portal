@@ -77,7 +77,7 @@ async function viewItem(id) {
     <div class="grid2 mt" style="align-items:start">
       <div>
         <div class="card"><h3>Status</h3><div class="kv">
-          <div>Result</div><div>${outcomeBadge(st.outcome)}</div>
+          <div>Result</div><div>${outcomeBadge(st.outcome)}${st.last && st.last.fd ? ` <b class="small">${esc(st.last.fd.result)}</b>` : ''}</div>
           <div>Last Inspected</div><div>${st.last ? `${esc(fmtDate(st.last.date))} by ${esc(st.last.inspector || '—')}` : 'Never'}</div>
           <div>Next Due</div><div>${dueBadge(st)}</div>
           ${st.last && st.last.action ? `<div>Action Needed</div><div>${esc(st.last.action)}</div>` : ''}
@@ -98,12 +98,14 @@ async function viewItem(id) {
       </div>
     </div>
     <div class="card"><h3>Inspection History</h3>
-      ${history.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Date</th><th>Inspector</th><th>Result</th><th>Defects / Notes</th><th>Next Due</th><th>Photos</th></tr></thead><tbody>
+      ${history.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Date</th><th>Inspector</th><th>Result</th><th>Defects / Notes</th><th>Next Due</th><th>Photos</th><th></th></tr></thead><tbody>
         ${history.map(h => `<tr ${Cloud.isClient() ? '' : `class="click" data-href="#/inspect/${id}/${h.id}"`}><td>${esc(fmtDate(h.date))}</td><td>${esc(h.inspector || '')}</td><td>${outcomeBadge(h.outcome)}</td>
-          <td class="small">${esc([failedChecksText(it, h).join('; '), h.notes].filter(Boolean).join(' — '))}</td><td>${esc(fmtDate(h.nextDue))}</td><td>${(h.photos || []).length || ''}</td></tr>`).join('')}
+          <td class="small">${esc([failedChecksText(it, h).join('; '), h.notes].filter(Boolean).join(' — '))}</td><td>${esc(fmtDate(h.nextDue))}</td><td>${(h.photos || []).length || ''}</td>
+          <td>${h.fd ? `<div class="row" style="flex-wrap:nowrap"><button class="btn small" data-fdprint="${h.id}" data-kind="record">Record</button><button class="btn small" data-fdprint="${h.id}" data-kind="client">Client Report</button></div>` : ''}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="muted">No inspections recorded yet.</p>'}
     </div>`;
   bindRowLinks();
+  $$('[data-fdprint]').forEach(b => b.onclick = e => { e.stopPropagation(); fdPrint(it, Store.get('inspections', b.dataset.fdprint), b.dataset.kind); });
   $('#qrImg').src = await qrDataUrl(url, 400);
   $('#editItem').onclick = () => itemForm(it, () => viewItem(id));
   $('#showPlan').onclick = () => {
@@ -147,6 +149,8 @@ async function viewItem(id) {
 function viewInspect(itemId, inspId) {
   const it = Store.get('items', itemId);
   if (!it) return notFound();
+  const old = inspId ? Store.get('inspections', inspId) : null;
+  if (it.type === 'fire-door' && (!old || old.fd)) return viewFireDoorInspect(itemId, inspId);
   const site = siteOf(it);
   const t = ITEM_TYPES[it.type] || ITEM_TYPES.other;
   const existing = inspId ? Store.get('inspections', inspId) : null;
