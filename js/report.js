@@ -74,6 +74,7 @@ async function buildReport(siteId, opts) {
       <div style="opacity:.85">${esc([site.address, site.postcode].filter(Boolean).join(', '))}</div>
     </div>
     <div class="cover-meta">
+      ${client.logo ? `<div style="display:flex;align-items:center;gap:5mm;margin-bottom:5mm"><div class="small" style="color:#555">Prepared for</div><img src="${client.logo}" style="max-height:22mm;max-width:70mm"></div>` : ''}
       <table>
         <tr><th style="width:45mm">Client</th><td>${esc(client.name || '')}</td></tr>
         <tr><th>Client Contact</th><td>${esc([client.contact, client.email, client.phone].filter(Boolean).join(' · '))}</td></tr>

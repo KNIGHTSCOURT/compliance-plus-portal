@@ -206,6 +206,17 @@ async function compressImage(file, max = 1600, quality = 0.8) {
   return c.toDataURL('image/jpeg', quality);
 }
 
+/* Logos: scaled to fit 600 × 300 px and kept as PNG so transparent backgrounds survive. */
+async function resizeLogo(file) {
+  const img = await loadImage(await readFileAsDataUrl(file));
+  if (!img) return null;
+  const k = Math.min(1, 600 / img.width, 300 / img.height);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/png');
+}
+
 async function hydratePhotos(root = document) {
   for (const img of $$('img[data-photo]', root)) {
     const src = await Store.getPhoto(img.dataset.photo);

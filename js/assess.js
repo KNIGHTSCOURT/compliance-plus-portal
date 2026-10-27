@@ -272,7 +272,7 @@ function viewAssessment(id) {
       const cover = `<div class="page"><div class="cover-band"><div style="font-weight:700">${esc(s.businessName)}</div>
         <h1>${esc(title)}</h1><div>${esc(site ? site.name : '')}</div>
         <div style="opacity:.85">${esc(site ? [site.address, site.postcode].filter(Boolean).join(', ') : '')}</div></div>
-        <table class="mt"><tr><th style="width:45mm">Client</th><td>${esc(client ? client.name : '')}</td></tr><tr><th>Assessor</th><td>${esc(a.assessor || '')}${s.qualifications ? ' — ' + esc(s.qualifications) : ''}</td></tr>
+        ${client && client.logo ? `<div style="display:flex;align-items:center;gap:5mm;margin-top:5mm"><span class="small" style="color:#555">Prepared for</span><img src="${client.logo}" style="max-height:20mm;max-width:65mm"></div>` : ''}<table class="mt"><tr><th style="width:45mm">Client</th><td>${esc(client ? client.name : '')}</td></tr><tr><th>Assessor</th><td>${esc(a.assessor || '')}${s.qualifications ? ' — ' + esc(s.qualifications) : ''}</td></tr>
         <tr><th>Date</th><td>${esc(fmtDate(a.date))}</td></tr><tr><th>${isLog ? 'Next Check Due' : 'Review Date'}</th><td>${esc(fmtDate(a.reviewDate))}</td></tr>${isLog ? '' : `<tr><th>Status</th><td>${esc(a.status || 'Draft')}</td></tr>`}</table></div>`;
       showPrint(`<div class="report">${cover}${bodyHtml()}</div>`, { title: `${site ? site.name : ''} - ${title} ${a.date}` });
     };

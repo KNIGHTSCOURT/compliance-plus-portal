@@ -169,6 +169,13 @@ table.list tr.click:hover td { background: #fbf6f4; }
 .kv div:nth-child(odd) { color: var(--muted); }
 video.scanner { width: 100%; max-width: 480px; border-radius: 10px; background: #000; }
 
+/* Client logos */
+.logo-box { width: 220px; height: 90px; border: 1px dashed #c5ccd8; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; background: #fafbfd; padding: 6px; }
+.logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.client-logo { max-height: 56px; max-width: 140px; object-fit: contain; margin-right: 14px; }
+.client-logo-sm { max-height: 22px; max-width: 60px; object-fit: contain; vertical-align: middle; margin-right: 4px; }
+@media (max-width: 760px) { .client-logo { max-height: 40px; max-width: 90px; } }
+
 /* Fire door inspection */
 .fd-bar { padding: 12px 16px; }
 @media (min-width: 1100px) { .fd-bar { position: sticky; top: 64px; z-index: 15; } }

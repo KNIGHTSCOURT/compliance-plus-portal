@@ -7,18 +7,36 @@ const siteUI = {};
 
 /* ---------- Clients ---------- */
 function clientForm(c = {}, after) {
+  let logo = c.logo || '';
+  const logoBox = () => `<div class="logo-box">${logo ? `<img src="${logo}" alt="Client logo">` : '<span class="muted small">No logo yet</span>'}</div>
+    <div class="row"><label class="btn small" style="color:inherit;font-size:.85rem">${logo ? 'Change Logo' : 'Upload Logo'}<input type="file" id="clientLogoIn" accept="image/*" hidden></label>
+    ${logo ? '<button type="button" class="btn small danger" id="clientLogoRm">Remove</button>' : ''}</div>`;
+  const bindLogo = m => {
+    $('#clientLogoIn', m).onchange = async e => {
+      const f = e.target.files[0]; if (!f) return;
+      const url = await resizeLogo(f);
+      if (!url) { toast('That file is not an image'); return; }
+      logo = url; $('#logoWrap', m).innerHTML = logoBox(); bindLogo(m);
+    };
+    const rm = $('#clientLogoRm', m);
+    if (rm) rm.onclick = () => { logo = ''; $('#logoWrap', m).innerHTML = logoBox(); bindLogo(m); };
+  };
   openModal({
     title: c.id ? 'Edit Client' : 'New Client',
     body: `${field('Client / Company Name', 'name', c.name, { required: true })}
+      <div class="field"><label>Company Logo</label><div id="logoWrap">${logoBox()}</div>
+        <div class="small muted">Shown on the client's page, their reports and the information request. PNG with a transparent background looks best.</div></div>
       <div class="grid2">${field('Contact Name', 'contact', c.contact)}${field('Phone', 'phone', c.phone, { type: 'tel' })}</div>
       ${field('Email', 'email', c.email, { type: 'email' })}
       ${field('Address', 'address', c.address, { type: 'textarea' })}
       ${field('Notes', 'notes', c.notes, { type: 'textarea' })}`,
+    onOpen: bindLogo,
     buttons: [
       { label: 'Cancel' },
       { label: 'Save Client', cls: 'primary', onClick: m => {
         const v = formValues(m);
         if (!v.name) { toast('Enter the client name'); return false; }
+        v.logo = logo;
         const rec = Store.upsert('clients', Object.assign(c, v));
         toast('Client saved');
         after ? after(rec) : go(`#/client/${rec.id}`);
@@ -45,7 +63,7 @@ function viewClients() {
     <div class="spread mb"><h1>Clients &amp; Sites</h1><button class="btn primary" id="addClient">+ New Client</button></div>
     ${clients.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Client</th><th>Contact</th><th>Sites</th><th>Items</th><th>Defects</th><th>Overdue</th></tr></thead><tbody>
       ${clients.map(c => { const st = clientStats(c.id); return `<tr class="click" data-href="#/client/${c.id}">
-        <td><b>${esc(c.name)}</b>${c.demo ? ' <span class="badge b-untested">Demo</span>' : ''}</td><td>${esc(c.contact || '')}<div class="small muted">${esc(c.email || '')}</div></td>
+        <td>${c.logo ? `<img class="client-logo-sm" src="${c.logo}" alt=""> ` : ''}<b>${esc(c.name)}</b>${c.demo ? ' <span class="badge b-untested">Demo</span>' : ''}</td><td>${esc(c.contact || '')}<div class="small muted">${esc(c.email || '')}</div></td>
         <td>${st.sites.length}</td><td>${st.items.length}</td>
         <td>${st.defects ? `<span class="badge b-fail">${st.defects}</span>` : '0'}</td>
         <td>${st.overdue ? `<span class="badge b-overdue">${st.overdue}</span>` : '0'}</td></tr>`; }).join('')}
@@ -60,7 +78,7 @@ function viewClient(id) {
   setCrumbs([['Clients & Sites', '#/clients'], [c.name]]);
   const st = clientStats(id);
   $('#view').innerHTML = `
-    <div class="spread"><div><h1>${esc(c.name)}</h1><div class="muted">${esc([c.contact, c.phone, c.email].filter(Boolean).join(' · '))}</div></div>
+    <div class="spread"><div class="row" style="flex-wrap:nowrap;align-items:center">${c.logo ? `<img class="client-logo" src="${c.logo}" alt="">` : ''}<div><h1>${esc(c.name)}</h1><div class="muted">${esc([c.contact, c.phone, c.email].filter(Boolean).join(' · '))}</div></div></div>
       <div class="row staff-only"><button class="btn" id="editClient">Edit</button><button class="btn danger" id="delClient">Delete</button><button class="btn primary" id="addSite">+ New Site</button></div></div>
     ${c.address || c.notes ? `<div class="card mt"><div class="kv"><div>Address</div><div>${esc(c.address || '—')}</div><div>Notes</div><div>${esc(c.notes || '—')}</div></div></div>` : ''}
     <h2 class="mt">Sites</h2>
@@ -124,8 +142,8 @@ function viewSite(id, tab = 'plan') {
   setCrumbs([['Clients & Sites', '#/clients'], [client.name, `#/client/${client.id}`], [site.name]]);
   const tabs = [['plan', 'Plan & 3D'], ['items', 'Items'], ['systems', 'Fire Systems'], ['assess', 'Assessments & Checks'], ['reports', 'Reports & QR Labels']];
   $('#view').innerHTML = `
-    <div class="spread"><div><h1>${esc(site.name)}</h1>
-      <div class="muted">${esc([site.address, site.postcode].filter(Boolean).join(', '))}${site.buildingUse ? ' · ' + esc(site.buildingUse) : ''}</div></div>
+    <div class="spread"><div class="row" style="flex-wrap:nowrap;align-items:center">${client.logo ? `<img class="client-logo" src="${client.logo}" alt="">` : ''}<div><h1>${esc(site.name)}</h1>
+      <div class="muted">${esc([site.address, site.postcode].filter(Boolean).join(', '))}${site.buildingUse ? ' · ' + esc(site.buildingUse) : ''}</div></div></div>
       <div class="row staff-only"><button class="btn" id="editSite">Edit Site</button><button class="btn danger" id="delSite">Delete</button></div></div>
     <nav class="tabs">${tabs.map(([k, l]) => `<a href="#/site/${id}/${k}" class="${tab === k ? 'active' : ''}">${l}</a>`).join('')}</nav>
     <div id="tabBody"></div>`;
@@ -598,7 +616,7 @@ function renderSystemsTab(site, root) {
     const rows = unknown.map((u, i) => { const head = u.group !== last ? `<h3>${esc(u.group)}</h3>` : ''; last = u.group;
       return `${head}<div style="page-break-inside:avoid;margin:0 0 4mm"><b>${i + 1}.</b> ${esc(u.ask)}<div style="border-bottom:1px solid #999;height:9mm"></div><div style="border-bottom:1px solid #999;height:8mm"></div></div>`; }).join('');
     showPrint(`<div class="report"><div class="page"><div style="font-weight:700;color:var(--navy)">${esc(s.businessName)}</div>
-      <h1>Fire Safety Information Request</h1><p><b>${esc(client.name || '')}</b> — ${esc(site.name)}${site.address ? ', ' + esc(site.address) : ''}</p>
+      ${client.logo ? `<img src="${client.logo}" style="float:right;max-height:18mm;max-width:55mm">` : ''}<h1>Fire Safety Information Request</h1><p><b>${esc(client.name || '')}</b> — ${esc(site.name)}${site.address ? ', ' + esc(site.address) : ''}</p>
       <p class="small">Please answer what you can and return this sheet, with copies of your latest fire alarm and emergency lighting service certificates and your fire log book. Your maintenance contractor can help with the technical questions.</p>
       ${rows}<p class="small mt">Completed by: ______________________ &nbsp; Date: ____________</p></div></div>`, { title: `${site.name} - Fire Safety Information Request` });
   };

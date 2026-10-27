@@ -555,7 +555,7 @@ async function fdRecordHtml(it, insp) {
   const resultColour = fd.result === 'Pass' ? '#2e7d32' : fd.result === 'Pass with caveats' ? '#b26a00' : '#c62828';
   return `<div class="page">
     <div class="spread" style="align-items:flex-start"><div>${s.logo ? `<img src="${s.logo}" style="max-height:16mm;max-width:50mm">` : `<b style="color:var(--navy)">${esc(s.businessName)}</b>`}
-      <h1 style="margin-top:3mm">Fire Door Inspection Record</h1></div>
+      <h1 style="margin-top:3mm">Fire Door Inspection Record</h1>${client && client.logo ? `<img src="${client.logo}" style="max-height:12mm;max-width:45mm">` : ''}</div>
       <table style="width:70mm"><tr><th>Door Ref</th><td>${esc(it.ref)}</td></tr><tr><th>Inspected</th><td>${esc(fmtDate(insp.date))}</td></tr><tr><th>Next Due</th><td>${esc(fmtDate(insp.nextDue))}</td></tr></table></div>
     <div style="border-left:2.5mm solid ${resultColour};background:#f6f7fa;padding:3mm 4mm;margin:3mm 0"><b style="font-size:13pt;color:${resultColour}">${esc(fd.result || OUTCOME_LABEL[insp.outcome])}</b></div>
     <h2>Door Details</h2>
@@ -609,7 +609,7 @@ async function fdClientReportHtml(it, insp) {
   for (const [slot, pid] of Object.entries(fd.photoSlots || {})) { if (!['outside', 'inside'].includes(slot) && slot[0] !== 'd') continue; const src = await Store.getPhoto(pid); if (src) out.push(`<img src="${src}" style="width:56mm;height:42mm;object-fit:cover;border:1px solid #ccd">`); }
   return `<div class="page">
     <div style="background:var(--navy);color:#fff;padding:6mm 7mm;border-radius:4px"><div style="font-size:9pt;letter-spacing:.08em;color:#ffb48e;font-weight:700">${esc(s.businessName.toUpperCase())} · FIRE DOOR REPORT</div>
-      <h1 style="color:#fff;margin:2mm 0 1mm">${esc(itemTitle(it))}</h1><div>${esc(client ? client.name + ' · ' : '')}${esc(site ? site.name : '')} · ${esc(locationText(it, true))}</div></div>
+      ${client && client.logo ? `<img src="${client.logo}" style="float:right;max-height:16mm;max-width:45mm;background:#fff;padding:1.5mm;border-radius:3px">` : ''}<h1 style="color:#fff;margin:2mm 0 1mm">${esc(itemTitle(it))}</h1><div>${esc(client ? client.name + ' · ' : '')}${esc(site ? site.name : '')} · ${esc(locationText(it, true))}</div></div>
     <table class="mt"><tr><th style="width:40mm">Door Ref</th><td>${esc(it.ref)}</td><th style="width:30mm">Inspected</th><td>${esc(fmtDate(insp.date))}</td></tr>
       <tr><th>Inspected By</th><td>${esc(insp.inspector || '')}</td><th>Next Check</th><td>${esc(fmtDate(insp.nextDue))}</td></tr></table>
     <div style="border-left:2.5mm solid ${text[0]};background:#f6f7fa;padding:4mm 5mm;margin:4mm 0"><h2 style="margin:0 0 1mm;border:0;color:${text[0]}">${esc(text[1])}</h2><p style="margin:0">${esc(text[2])}</p></div>
