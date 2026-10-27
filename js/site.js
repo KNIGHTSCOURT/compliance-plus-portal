@@ -233,9 +233,13 @@ async function renderPlanTab(site, root) {
         <input type="file" id="bgFile" accept="image/*" hidden>
         <button class="btn small" id="zoomIn">+</button><button class="btn small" id="zoomOut">−</button><button class="btn small" id="fit">Fit</button>`
       : `
-        <div class="seg"><button data-scope="all">All Floors</button><button data-scope="floor">This Floor</button></div>
+        <div class="seg" id="moveSeg"><button data-move="orbit">Orbit</button><button data-move="drone">Drone</button><button data-move="walk">Walk</button></div>
+        ${(ui.move || 'orbit') === 'orbit' ? `<div class="seg"><button data-scope="all">All Floors</button><button data-scope="floor">This Floor</button></div>
         <label class="row small" style="margin:0">Spacing <input type="range" id="explode" min="1" max="4" step="0.1" value="${ui.explode}" style="width:110px"></label>
-        <button class="btn small" id="view3d">3D View</button><button class="btn small" id="viewTop">Top View</button>`}
+        <button class="btn small" id="view3d">3D View</button><button class="btn small" id="viewTop">Top View</button>` : `
+        ${ui.move === 'drone' ? '<div class="seg"><button data-scope="all">All Floors</button><button data-scope="floor">This Floor</button></div>' : `<span class="small muted">Walking on <b>${esc(floor.name)}</b></span>`}
+        <label class="row small" style="margin:0">Speed <select id="flySpeed" style="width:auto"><option value="0.5">Slow</option><option value="1">Normal</option><option value="2">Fast</option></select></label>
+        <button class="btn small" id="flyReset">${ui.move === 'walk' ? 'Back To Start' : 'Back To Overview'}</button>`}`}
     </div>
     <div class="plan-layout">
       <div>
@@ -348,11 +352,25 @@ async function renderPlanTab(site, root) {
   function build3d() {
     const bgImages = new Map();
     if (bgImg && floor.bg) bgImages.set(floor.bg.photoId, bgImg);
+    const walk = ui.move === 'walk';
     viewer.build(site, siteItems(), {
-      floorId: ui.scope === 'all' ? 'all' : floor.id, explode: ui.explode, bgImages,
+      floorId: walk || ui.scope !== 'all' ? floor.id : 'all', explode: ui.explode, bgImages, solidWalls: walk,
       highlightId: ui.selected && ui.selected.kind === 'item' ? ui.selected.id : null, keepCamera: viewer.built
     });
     viewer.built = true;
+    if (viewer.mode !== 'orbit') { if (walk) viewer.walkLevel = viewer.levels[floor.id]; viewer.applyFp(); }
+  }
+
+  // Where Walk mode starts: next to the selected item on this floor, otherwise the middle of the floor.
+  function walkStart() {
+    const it = ui.selected && ui.selected.kind === 'item' ? Store.get('items', ui.selected.id) : null;
+    if (it && it.floorId === floor.id && it.x != null) {
+      const L = viewer.levels[floor.id]; const b = L ? L.bounds : null;
+      const cx = b ? (b.x0 + b.x1) / 2 : it.x, cy = b ? (b.y0 + b.y1) / 2 : it.y;
+      const d = Math.hypot(cx - it.x, cy - it.y) || 1;
+      return { start: { x: it.x + (cx - it.x) / d * 1.8, y: it.y + (cy - it.y) / d * 1.8 }, faceFrom: { x: it.x + (cx - it.x) / d * 3.6, y: it.y + (cy - it.y) / d * 3.6 } };
+    }
+    return {};
   }
 
   if (ui.view === '2d') {
@@ -458,16 +476,55 @@ async function renderPlanTab(site, root) {
       onPick: it => { ui.selected = { kind: 'item', id: it.id }; if (it.floorId !== floor.id && ui.scope !== 'all') return; build3d(); renderSide(); }
     });
     stage.appendChild(hint);
-    hint.textContent = 'Drag to rotate · Right-drag or Shift-drag to pan · Scroll or pinch to zoom · Tap a pin to select it';
+    const move = ui.move || 'orbit';
+    hint.textContent = move === 'drone' ? 'Drag to look around · W A S D or the pad to fly · E / Q or ▲ ▼ to go up and down · Shift to go faster · Tap a pin to open it'
+      : move === 'walk' ? 'Drag to look around · W A S D / arrow keys or the pad to walk · Walls stop you, doorways let you through · Tap a pin to open it'
+      : 'Drag to rotate · Right-drag or Shift-drag to pan · Scroll or pinch to zoom · Tap a pin to select it';
     registerCleanup(() => viewer.dispose());
+    window.cpViewer = viewer;   // for checking from the browser console
+    $$('[data-move]', root).forEach(b => {
+      b.className = b.dataset.move === move ? 'on-pass' : '';
+      b.onclick = () => { if (ui.move === b.dataset.move) return; ui.move = b.dataset.move; renderPlanTab(site, root); };
+    });
+    if (move !== 'orbit') {
+      // on-screen pad for phones and tablets (also works with a mouse)
+      const pad = document.createElement('div');
+      pad.className = 'fly-pad';
+      pad.innerHTML = `<div class="fly-stick"><div class="fly-knob"></div></div>`
+        + (move === 'drone' ? '<div class="fly-lift"><button type="button" data-lift="1" aria-label="Up">▲</button><button type="button" data-lift="-1" aria-label="Down">▼</button></div>' : '');
+      stage.appendChild(pad);
+      const stick = pad.querySelector('.fly-stick'), knob = pad.querySelector('.fly-knob');
+      const setStick = e => {
+        const r = stick.getBoundingClientRect();
+        let x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+        const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+        viewer.joy = { x, y };
+        knob.style.transform = `translate(${x * 32}px, ${y * 32}px)`;
+      };
+      const endStick = () => { viewer.joy = { x: 0, y: 0 }; knob.style.transform = ''; };
+      stick.addEventListener('pointerdown', e => { e.stopPropagation(); stick.setPointerCapture(e.pointerId); setStick(e); });
+      stick.addEventListener('pointermove', e => { if (stick.hasPointerCapture(e.pointerId)) setStick(e); });
+      stick.addEventListener('pointerup', endStick); stick.addEventListener('pointercancel', endStick);
+      pad.querySelectorAll('[data-lift]').forEach(b => {
+        b.addEventListener('pointerdown', e => { e.stopPropagation(); b.setPointerCapture(e.pointerId); viewer.lift = Number(b.dataset.lift); });
+        const stop = () => { viewer.lift = 0; };
+        b.addEventListener('pointerup', stop); b.addEventListener('pointercancel', stop);
+      });
+    }
     $$('[data-scope]', root).forEach(b => {
       b.className = b.dataset.scope === ui.scope ? 'on-pass' : '';
       b.onclick = () => { ui.scope = b.dataset.scope; $$('[data-scope]', root).forEach(x => x.className = x.dataset.scope === ui.scope ? 'on-pass' : ''); viewer.built = false; build3d(); };
     });
-    $('#explode').oninput = e => { ui.explode = +e.target.value; build3d(); };
-    $('#view3d').onclick = () => viewer.setView('iso');
-    $('#viewTop').onclick = () => viewer.setView('top');
+    if ($('#explode')) $('#explode').oninput = e => { ui.explode = +e.target.value; build3d(); };
+    if ($('#view3d')) $('#view3d').onclick = () => viewer.setView('iso');
+    if ($('#viewTop')) $('#viewTop').onclick = () => viewer.setView('top');
+    const speed = $('#flySpeed');
+    if (speed) { speed.value = String(ui.flySpeed || 1); speed.onchange = () => { ui.flySpeed = Number(speed.value); viewer.speedMul = ui.flySpeed; }; viewer.speedMul = ui.flySpeed || 1; }
     build3d();
+    if (move !== 'orbit') {
+      viewer.setMode(move, move === 'walk' ? Object.assign({ floorId: floor.id }, walkStart()) : {});
+      $('#flyReset').onclick = () => { if (move === 'walk') viewer.setMode('walk', { floorId: floor.id }); else { viewer.setMode('orbit'); viewer.frame(); viewer.setMode('drone'); } };
+    }
   }
   renderSide();
 }

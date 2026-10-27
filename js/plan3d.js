@@ -27,6 +27,14 @@ class Plan3D {
     this.scene.add(this.group);
 
     this.orbit = { target: new THREE.Vector3(), radius: 40, theta: Math.PI / 4, phi: Math.PI / 3.2 };
+    // First-person modes: 'drone' flies freely, 'walk' stays at eye height on one floor and stops at walls.
+    this.mode = 'orbit';
+    this.fp = { pos: new THREE.Vector3(), yaw: 0, pitch: 0 };
+    this.keys = {};
+    this.joy = { x: 0, y: 0 };
+    this.lift = 0;
+    this.speedMul = 1;
+    this.levels = {};
     this.pickables = [];
     this.pointers = new Map();
     this.dirty = true;
@@ -42,11 +50,27 @@ class Plan3D {
     el.addEventListener('pointercancel', this._up);
     el.addEventListener('wheel', this._wheel, { passive: false });
     el.addEventListener('contextmenu', e => e.preventDefault());
+    this._key = e => {
+      if (this.mode === 'orbit' || /INPUT|SELECT|TEXTAREA/.test((e.target && e.target.tagName) || '')) return;
+      const k = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'q', 'e', 'c', ' ', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'pageup', 'pagedown'].includes(k)) {
+        this.keys[k] = e.type === 'keydown';
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', this._key);
+    window.addEventListener('keyup', this._key);
+    this._blur = () => { this.keys = {}; };
+    window.addEventListener('blur', this._blur);
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
     this.resize();
-    const loop = () => {
+    let last = performance.now();
+    const loop = now => {
       this.raf = requestAnimationFrame(loop);
+      const dt = Math.min(0.1, ((now || performance.now()) - last) / 1000);
+      last = now || performance.now();
+      if (this.mode !== 'orbit') this.step(dt);
       if (this.dirty) { this.dirty = false; this.renderer.render(this.scene, this.camera); }
     };
     loop();
@@ -55,6 +79,9 @@ class Plan3D {
   dispose() {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
+    window.removeEventListener('keydown', this._key);
+    window.removeEventListener('keyup', this._key);
+    window.removeEventListener('blur', this._blur);
     this.clear();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -120,7 +147,10 @@ class Plan3D {
     const explode = opts.explode || 1;
     let elev = 0;
     const statusOf = this.cfg.statusOf || (() => 'untested');
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xf3f5f9, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    const wallMat = opts.solidWalls
+      ? new THREE.MeshStandardMaterial({ color: 0xeef1f6, side: THREE.DoubleSide })
+      : new THREE.MeshStandardMaterial({ color: 0xf3f5f9, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    this.levels = {};
     const lineMat = new THREE.LineBasicMaterial({ color: 0x34495e });
 
     for (const floor of floors) {
@@ -137,6 +167,9 @@ class Plan3D {
         );
         slab.position.set((b.x0 + b.x1) / 2, elev - 0.08, (b.y0 + b.y1) / 2);
         this.group.add(slab);
+        // walls a walker can bump into: imported walls, or the outline of each drawn room
+        const solid = (floor.walls || []).map(w => w.slice(0, 5));
+        this.levels[floor.id] = { elev, h, bounds: b, walls: solid, name: floor.name };
 
         if (bgImg && floor.bg.widthM) {
           const tex = new THREE.Texture(bgImg);
@@ -301,6 +334,12 @@ class Plan3D {
       const [a, b] = [...this.pointers.values()];
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (this.mode !== 'orbit') {
+        const step = (dist - d.dist) * 0.02 * (this.mode === 'walk' ? 1 : 3);
+        this.tryMove(Math.sin(this.fp.yaw) * step, Math.cos(this.fp.yaw) * step);
+        d.dist = dist; d.mid = mid; this.applyFp();
+        return;
+      }
       this.orbit.radius = Math.max(2, Math.min(600, this.orbit.radius * d.dist / dist));
       this.pan(mid.x - d.mid.x, mid.y - d.mid.y);
       d.dist = dist; d.mid = mid;
@@ -310,6 +349,18 @@ class Plan3D {
     const dx = p.x - d.last.x, dy = p.y - d.last.y;
     d.last = p;
     if (Math.hypot(p.x - d.start.x, p.y - d.start.y) > 5) d.moved = true;
+    if (this.mode !== 'orbit') {
+      if (d.kind === 'pan' && this.mode === 'drone') {
+        const k = 0.02, f = this.fp;
+        this.tryMove(Math.cos(f.yaw) * dx * k, -Math.sin(f.yaw) * dx * k);
+        f.pos.y = Math.max(0.3, f.pos.y + dy * k);
+      } else {
+        this.fp.yaw -= dx * 0.005;
+        this.fp.pitch = Math.max(-1.45, Math.min(1.45, this.fp.pitch - dy * 0.005));
+      }
+      this.applyFp();
+      return;
+    }
     if (d.kind === 'rotate') {
       this.orbit.theta -= dx * 0.008;
       this.orbit.phi = Math.max(0.02, Math.min(Math.PI / 2 - 0.03, this.orbit.phi - dy * 0.008));
@@ -331,8 +382,91 @@ class Plan3D {
 
   wheel(e) {
     e.preventDefault();
+    if (this.mode !== 'orbit') {
+      const f = this.fp, step = (e.deltaY > 0 ? -1 : 1) * (this.mode === 'walk' ? 0.5 : 2) * this.speedMul;
+      if (this.mode === 'drone') { f.pos.x += Math.sin(f.yaw) * Math.cos(f.pitch) * step; f.pos.z += Math.cos(f.yaw) * Math.cos(f.pitch) * step; f.pos.y = Math.max(0.3, f.pos.y + Math.sin(f.pitch) * step); }
+      else this.tryMove(Math.sin(f.yaw) * step, Math.cos(f.yaw) * step);
+      this.applyFp();
+      return;
+    }
     this.orbit.radius = Math.max(2, Math.min(600, this.orbit.radius * (e.deltaY > 0 ? 1.12 : 1 / 1.12)));
     this.updateCamera();
+  }
+
+  /* ---------- Drone and walk modes ---------- */
+  setMode(mode, opts = {}) {
+    this.mode = mode;
+    this.keys = {}; this.joy = { x: 0, y: 0 }; this.lift = 0;
+    const f = this.fp;
+    if (mode === 'orbit') { this.updateCamera(); return; }
+    if (mode === 'walk') {
+      const L = this.levels[opts.floorId] || Object.values(this.levels)[0];
+      if (!L) return;
+      this.walkLevel = L;
+      const b = L.bounds;
+      let x = opts.start ? opts.start.x : (b.x0 + b.x1) / 2;
+      let z = opts.start ? opts.start.y : (b.y0 + b.y1) / 2;
+      // step off any wall the start point lands on
+      for (let r = 0; r < 4 && this.blocked(x, z); r += 0.25) {
+        const free = [0, 1, 2, 3, 4, 5, 6, 7].map(i => [x + Math.cos(i * Math.PI / 4) * r, z + Math.sin(i * Math.PI / 4) * r]).find(([a, c]) => !this.blocked(a, c));
+        if (free) { [x, z] = free; break; }
+      }
+      f.pos.set(x, L.elev + 1.6, z);
+      f.pitch = 0;
+      if (opts.start && opts.faceFrom) f.yaw = Math.atan2(opts.start.x - opts.faceFrom.x, opts.start.y - opts.faceFrom.y);
+    } else {
+      // drone: take off from wherever the orbit camera is, looking at the same point
+      f.pos.copy(this.camera.position);
+      const dir = this.orbit.target.clone().sub(this.camera.position).normalize();
+      f.yaw = Math.atan2(dir.x, dir.z);
+      f.pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+    }
+    this.applyFp();
+  }
+
+  applyFp() {
+    const f = this.fp;
+    const dir = new THREE.Vector3(Math.sin(f.yaw) * Math.cos(f.pitch), Math.sin(f.pitch), Math.cos(f.yaw) * Math.cos(f.pitch));
+    this.camera.position.copy(f.pos);
+    this.camera.lookAt(f.pos.clone().add(dir));
+    this.dirty = true;
+    if (this.cfg.onMove) this.cfg.onMove(f);
+  }
+
+  blocked(x, z) {
+    const L = this.walkLevel;
+    if (!L) return false;
+    const R = 0.22;
+    for (const [x1, y1, x2, y2, t] of L.walls) {
+      const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1;
+      const k = Math.max(0, Math.min(1, ((x - x1) * dx + (z - y1) * dy) / l2));
+      if (Math.hypot(x - (x1 + dx * k), z - (y1 + dy * k)) < (t || 0.15) / 2 + R) return true;
+    }
+    return false;
+  }
+
+  tryMove(dx, dz) {
+    const p = this.fp.pos;
+    if (this.mode !== 'walk') { p.x += dx; p.z += dz; return; }
+    if (!this.blocked(p.x + dx, p.z + dz)) { p.x += dx; p.z += dz; }
+    else if (!this.blocked(p.x + dx, p.z)) p.x += dx;      // slide along the wall
+    else if (!this.blocked(p.x, p.z + dz)) p.z += dz;
+  }
+
+  step(dt) {
+    const k = this.keys, f = this.fp;
+    const turn = (k.arrowright ? 1 : 0) - (k.arrowleft ? 1 : 0);
+    const fwd = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0) - this.joy.y;
+    const side = (k.d ? 1 : 0) - (k.a ? 1 : 0) + this.joy.x;
+    const vert = (k.e || k[' '] || k.pageup ? 1 : 0) - (k.q || k.c || k.pagedown ? 1 : 0) + this.lift;
+    if (!turn && !fwd && !side && !vert) return;
+    f.yaw -= turn * 1.8 * dt;
+    const speed = (this.mode === 'walk' ? 1.6 : 7) * (k.shift ? 2.5 : 1) * this.speedMul;
+    const sx = Math.sin(f.yaw), cz = Math.cos(f.yaw);
+    // forward (sin, cos); right (-cos, sin)
+    this.tryMove((sx * fwd - cz * side) * speed * dt, (cz * fwd + sx * side) * speed * dt);
+    if (this.mode === 'drone') f.pos.y = Math.max(0.3, f.pos.y + vert * speed * 0.7 * dt);
+    this.applyFp();
   }
 
   snapshot() {
