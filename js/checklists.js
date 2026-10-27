@@ -38,6 +38,23 @@ const ITEM_TYPES = {
     ]
   },
 
+  'door': {
+    label: 'Door (Non-Fire)', code: 'DR', color: '#7f8c8d', interval: 12,
+    details: [
+      { key: 'config', label: 'Configuration', type: 'select', options: ['Single Leaf', 'Double Leaf', 'Leaf And A Half', 'Sliding', 'Roller Shutter'] },
+      { key: 'use', label: 'Door Use', type: 'select', options: ['Office / Room', 'WC / Washroom', 'Store', 'Corridor', 'Plant / Service', 'Other'] },
+      { key: 'fireDoorCheck', label: 'Should This Be A Fire Door?', type: 'select', options: ['No', 'Yes — Needs Upgrading', 'To Be Confirmed'] }
+    ],
+    checks: [
+      { key: 'operates', q: 'Opens and closes freely', help: 'No sticking, dropping or binding' },
+      { key: 'ironmongery', q: 'Handles, locks and hinges secure', help: '' },
+      { key: 'condition', q: 'Leaf, frame and any glazing undamaged', help: '' },
+      { key: 'notRoute', q: 'Not needed as a fire door on an escape route', help: 'Fail if this door protects a stair, escape corridor or high-risk room' },
+      { key: 'signage', q: 'Signage correct', help: 'No "Fire Door" signs on doors that are not fire doors' }
+    ],
+    readings: []
+  },
+
   'fire-exit': {
     label: 'Fire Exit', code: 'EX', color: '#117a65', interval: 12,
     details: [

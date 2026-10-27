@@ -16,11 +16,29 @@ function planBounds(floor, items, bgImg) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const add = (ax, ay, bx, by) => { x0 = Math.min(x0, ax); y0 = Math.min(y0, ay); x1 = Math.max(x1, bx); y1 = Math.max(y1, by); };
   for (const r of floor.rooms || []) add(r.x, r.y, r.x + r.w, r.y + r.d);
+  for (const w of floor.walls || []) add(Math.min(w[0], w[2]), Math.min(w[1], w[3]), Math.max(w[0], w[2]), Math.max(w[1], w[3]));
   for (const it of items || []) if (it.x != null) add(it.x - 0.5, it.y - 0.5, it.x + 0.5, it.y + 0.5);
+  const hasShape = isFinite(x0);
   const bg = floor.bg;
-  if (bg && bgImg && bg.widthM) add(bg.x || 0, bg.y || 0, (bg.x || 0) + bg.widthM, (bg.y || 0) + bg.widthM * bgImg.height / bgImg.width);
+  // A drawing only sets the view when nothing else has been drawn yet (scans often have wide margins).
+  if (bg && bgImg && bg.widthM && !hasShape) add(bg.x || 0, bg.y || 0, (bg.x || 0) + bg.widthM, (bg.y || 0) + bg.widthM * bgImg.height / bgImg.width);
   if (!isFinite(x0)) return { x0: 0, y0: 0, x1: 20, y1: 14 };
   return { x0, y0, x1, y1 };
+}
+
+/* The room a point is in. Rooms traced from drawings can overlap (open-plan areas), so when
+   several contain the point, the one whose label is closest wins; drawn rooms win over traced ones. */
+function roomAtPoint(floor, p) {
+  let best = null, bd = Infinity;
+  const rooms = (floor && floor.rooms) || [];
+  for (let i = rooms.length - 1; i >= 0; i--) {
+    const r = rooms[i];
+    if (!(p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.d)) continue;
+    if (r.lx == null) return r;
+    const d = Math.hypot(p.x - r.lx, p.y - r.ly);
+    if (d < bd) { bd = d; best = r; }
+  }
+  return best;
 }
 
 function fitView(b, W, H, pad = 40) {
@@ -60,9 +78,35 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     }
   }
 
+  // Walls imported from drawings: [x1, y1, x2, y2, thickness]
+  if (floor.walls && floor.walls.length) {
+    ctx.strokeStyle = '#2c3e50';
+    ctx.lineCap = 'square';
+    for (const [x1, y1, x2, y2, t] of floor.walls) {
+      ctx.lineWidth = Math.max(1.5, (t || 0.15) * view.scale);
+      ctx.beginPath(); ctx.moveTo(...S(x1, y1)); ctx.lineTo(...S(x2, y2)); ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+
   // Rooms
   (floor.rooms || []).forEach((r, i) => {
     const [x, y] = S(r.x, r.y);
+    if (r.lx != null) {
+      // Room taken from a drawing: the walls show its shape, so just label it at its plan position.
+      if (opts.selectedRoomId === r.id) {
+        ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e4572e'; ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, r.w * view.scale, r.d * view.scale); ctx.setLineDash([]);
+      }
+      const [lx, ly] = S(r.lx, r.ly);
+      const fs = Math.max(9, Math.min(13, view.scale * 0.3 / k)) * k;
+      ctx.font = `600 ${fs}px Segoe UI, Arial`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3 * k; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineJoin = 'round';
+      ctx.strokeText(r.name || 'Room', lx, ly);
+      ctx.fillStyle = '#1b2433'; ctx.fillText(r.name || 'Room', lx, ly);
+      return;
+    }
     const w = r.w * view.scale, h = r.d * view.scale;
     ctx.globalAlpha = opts.bgImg ? 0.45 : 0.9;
     ctx.fillStyle = r.color || ROOM_COLORS[i % ROOM_COLORS.length];
@@ -229,14 +273,7 @@ class PlanEditor {
   local(e) { const r = this.c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   snap(v, step = 0.25) { return Math.round(v / step) * step; }
 
-  roomAt(w) {
-    const rooms = this.floor.rooms || [];
-    for (let i = rooms.length - 1; i >= 0; i--) {
-      const r = rooms[i];
-      if (w.x >= r.x && w.x <= r.x + r.w && w.y >= r.y && w.y <= r.y + r.d) return r;
-    }
-    return null;
-  }
+  roomAt(w) { return roomAtPoint(this.floor, w); }
 
   itemAt(p) {
     let best = null, bd = 16;
@@ -310,7 +347,7 @@ class PlanEditor {
       if (this.cfg.locked) return;
       d.moved = true; d.it.x = Math.round(w.x * 10) / 10; d.it.y = Math.round(w.y * 10) / 10;
     } else if (d.kind === 'room' && (d.moved || movedFar)) {
-      if (this.cfg.locked) return;
+      if (this.cfg.locked || d.room.lx != null) return;
       d.moved = true; d.room.x = this.snap(d.rx + w.x - d.w.x); d.room.y = this.snap(d.ry + w.y - d.w.y);
     } else if (d.kind === 'pan') {
       d.moved = d.moved || movedFar;

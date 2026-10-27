@@ -148,7 +148,33 @@ class Plan3D {
           this.group.add(plane);
         }
 
+        // Walls imported from drawings: [x1, y1, x2, y2, thickness]
+        const edgePts = [];
+        for (const [x1, y1, x2, y2, tw] of floor.walls || []) {
+          const len = Math.hypot(x2 - x1, y2 - y1);
+          if (len < 0.02) continue;
+          const m = new THREE.Mesh(new THREE.BoxGeometry(len, h, Math.max(0.08, tw || 0.15)), wallMat);
+          m.position.set((x1 + x2) / 2, elev + h / 2, (y1 + y2) / 2);
+          m.rotation.y = -Math.atan2(y2 - y1, x2 - x1);
+          m.renderOrder = 1;
+          this.group.add(m);
+          edgePts.push(x1, elev + h, y1, x2, elev + h, y2, x1, elev + 0.02, y1, x2, elev + 0.02, y2);
+        }
+        if (edgePts.length) {
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.Float32BufferAttribute(edgePts, 3));
+          this.group.add(new THREE.LineSegments(g, lineMat));
+        }
+
         (floor.rooms || []).forEach((r, i) => {
+          if (r.lx != null) {
+            if (r.name && opts.roomLabels !== false) {
+              const s = this.textSprite(r.name, { height: 0.42 });
+              s.position.set(r.lx, elev + 0.35, r.ly);
+              this.group.add(s);
+            }
+            return;
+          }
           if (!bgImg) {
             const fl = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), new THREE.MeshStandardMaterial({ color: new THREE.Color(r.color || ROOM_COLORS[i % ROOM_COLORS.length]) }));
             fl.rotation.x = -Math.PI / 2;
@@ -190,7 +216,7 @@ class Plan3D {
           if (it.x == null) continue;
           const status = statusOf(it);
           const hi = opts.highlightId === it.id;
-          const pinH = it.type === 'fire-door' || it.type === 'fire-exit' ? 1.1 : it.type === 'alarm' || it.type === 'emergency-light' ? Math.max(1.4, h - 0.4) : 1.4;
+          const pinH = it.type === 'fire-door' || it.type === 'fire-exit' || it.type === 'door' ? 1.1 : it.type === 'alarm' || it.type === 'emergency-light' ? Math.max(1.4, h - 0.4) : 1.4;
           const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, pinH), new THREE.MeshBasicMaterial({ color: 0x34495e }));
           stalk.position.set(it.x, elev + pinH / 2, it.y);
           this.group.add(stalk);
@@ -222,7 +248,7 @@ class Plan3D {
     const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
     this.orbit.target.copy(c);
-    this.orbit.radius = Math.max(8, (r * 0.92) / Math.sin(Math.min(vHalf, hHalf)));
+    this.orbit.radius = Math.max(8, (r * 1.02) / Math.sin(Math.min(vHalf, hHalf)));
     this.updateCamera();
   }
 
