@@ -205,6 +205,8 @@ function viewQuote(id) {
         ${c.services >= 3 && !qNum(q.discount) ? `<br>Three or more services: you could offer your ${P.bundleDiscount}% package discount.` : ''}</div>`
       : '<p class="muted">Choose the work on the left to build the price.</p>';
     $('#qWin').innerHTML = q.status === 'Accepted' && !q.clientId ? `<div class="fd-box good"><div class="fd-box-h">Quote Accepted</div><p class="small">Set this customer up as a client, with the site ready for its plan.</p><button class="btn primary small" id="qToClient">Create Client And Site</button></div>` : '';
+    if (typeof accQuoteButton === 'function') $('#qWin').insertAdjacentHTML('beforeend', accQuoteButton(q));
+    if ($('#qInvoice')) $('#qInvoice').onclick = () => { save(); invFromQuote(q); };
     if ($('#qToClient')) $('#qToClient').onclick = () => qToClient(q);
   };
   const lineRow = x => `<div class="q-line"><input data-k="desc" placeholder="Description" value="${esc(x.desc || '')}"><input data-k="qty" type="number" min="0" step="any" placeholder="Qty" value="${esc(x.qty ?? 1)}"><input data-k="unit" type="number" step="0.01" placeholder="£ Each" value="${esc(x.unit ?? '')}"><button class="btn small danger" data-rm title="Remove">×</button></div>`;

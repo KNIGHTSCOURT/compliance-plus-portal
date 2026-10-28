@@ -99,6 +99,7 @@ function viewClient(id) {
     ${c.address || c.notes ? `<div class="card mt"><div class="kv"><div>Address</div><div>${esc(c.address || '—')}</div><div>Notes</div><div>${esc(c.notes || '—')}</div></div></div>` : ''}
     ${typeof clientProfileCard === 'function' ? clientProfileCard(c) : ''}
     ${typeof clientUpdatesCard === 'function' ? clientUpdatesCard(c) : ''}
+    ${typeof accClientCard === 'function' ? accClientCard(c) : ''}
     <h2 class="mt">Sites</h2>
     ${st.sites.length ? `<div class="cards">${st.sites.map(s => {
       const items = st.items.filter(i => i.siteId === s.id);

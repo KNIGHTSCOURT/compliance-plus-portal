@@ -356,3 +356,24 @@ body.printing .side-collapse { display: none; }
 .addr-box { border: 1px solid var(--line, #e6dbe3); border-radius: 14px; padding: 10px 14px 2px; margin: 0 0 14px; min-width: 0; }
 .addr-box legend { padding: 0 6px; font-weight: 700; font-size: 13px; color: var(--navy); }
 .addr-row1 { display: grid; grid-template-columns: 90px 1fr; gap: 0 14px; }
+
+/* Accounts (v2.0.0) */
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hide { display: none !important; }
+.acc-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.acc-period select, .acc-period input { width: auto; min-width: 0; }
+.acc-dates { display: inline-flex; align-items: center; gap: 6px; }
+.acc-kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.acc-kv b { white-space: nowrap; }
+.acc-kv.acc-total { border-bottom: 2px solid var(--navy); font-weight: 800; }
+.acc-kv.big { font-size: 17px; border-bottom: 0; }
+.acc-in { color: var(--lime-ink); font-weight: 700; }
+.neg { color: var(--fail); }
+.acc-bal { font-family: 'Poppins', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -.03em; }
+.acc-line { display: grid; grid-template-columns: 1fr 64px 96px auto; gap: 6px; margin-top: 8px; align-items: center; }
+.acc-line:has(select) { grid-template-columns: 1fr 64px 96px 86px auto; }
+.acc-line-h { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 12px; }
+.acc-line-h:has(span:nth-child(5)) { grid-template-columns: 1fr 64px 96px 86px 34px; }
+.acc-receipt { max-height: 120px; max-width: 200px; border-radius: 8px; border: 1px solid var(--line); cursor: zoom-in; }
+.acc-print-total td { font-weight: 800; border-top: 1.5px solid #2b0d24; }
+@media (max-width: 640px) { .acc-line, .acc-line:has(select) { grid-template-columns: 1fr 1fr; } .acc-line input[data-k=desc] { grid-column: 1 / -1; } .acc-line-h { display: none; } }

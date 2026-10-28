@@ -130,7 +130,7 @@ const Cloud = (() => {
 
   function rowClientId(coll, rec) {
     if (!rec) return null;
-    if (coll === 'quotes') return null; // quotes and the price list are staff-only
+    if (coll === 'quotes' || coll === 'accounts') return null; // accounts are never shared with a client login
     if (coll === 'notices') return rec.clientId || null; // an update reaches only its own client; the sent-history record stays staff-only
     if (coll === 'clients') return rec.id;
     if (coll === 'sites') return rec.clientId || null;

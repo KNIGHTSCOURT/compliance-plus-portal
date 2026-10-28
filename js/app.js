@@ -46,6 +46,15 @@ const ROUTES = [
   [/^#\/quotes\/prices$/, () => viewPriceList(), 'quotes'],
   [/^#\/quote\/([^/]+)$/, id => viewQuote(id), 'quotes'],
   [/^#\/updates$/, () => viewUpdates(), 'clients'],
+  [/^#\/accounts$/, () => viewAccounts(), 'accounts'],
+  [/^#\/accounts\/invoices$/, () => viewInvoices(), 'accounts'],
+  [/^#\/accounts\/money-in$/, () => viewMoneyIn(), 'accounts'],
+  [/^#\/accounts\/expenses$/, () => viewExpenses(), 'accounts'],
+  [/^#\/accounts\/mileage$/, () => viewMileage(), 'accounts'],
+  [/^#\/accounts\/bank(?:\/([^/]+))?$/, id => viewBank(id), 'accounts'],
+  [/^#\/accounts\/reports$/, () => viewAccReports(), 'accounts'],
+  [/^#\/accounts\/settings$/, () => viewAccSettings(), 'accounts'],
+  [/^#\/invoice\/([^/]+)$/, id => viewInvoice(id), 'accounts'],
   [/^#\/settings$/, () => viewSettings(), 'settings'],
   [/^#\/account$/, () => viewAccount(), 'account']
 ];
@@ -53,7 +62,7 @@ const ROUTES = [
 let appStarted = false;
 
 function clientRouteAllowed(h) {
-  if (/^#\/(clients|due|settings|inspect|quote|updates)/.test(h)) return false;
+  if (/^#\/(clients|due|settings|inspect|quote|updates|accounts|invoice)/.test(h)) return false;
   const m = h.match(/^#\/client\/([^/]+)/);
   if (m && decodeURIComponent(m[1]) !== Cloud.clientId) return false;
   return true;

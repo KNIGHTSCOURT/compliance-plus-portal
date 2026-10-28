@@ -8,7 +8,7 @@
 
 const Store = (() => {
   const DB_NAME = 'compliance-plus';
-  const COLLS = ['clients', 'sites', 'items', 'inspections', 'assessments', 'photos', 'quotes', 'notices'];
+  const COLLS = ['clients', 'sites', 'items', 'inspections', 'assessments', 'photos', 'quotes', 'notices', 'accounts'];
   let idb = null;
   let data = null;
   let saveTimer = null;
@@ -86,7 +86,10 @@ const Store = (() => {
       console.warn('IndexedDB unavailable, data will not be kept', e);
       idb = null;
     }
+    // a new kind of record was added since this device last ran: download everything again so none are missed
+    const newColl = data && COLLS.some(k => !Array.isArray(data[k]));
     normalise();
+    if (newColl && meta && meta.lastPull) delete meta.lastPull;
     return data;
   }
 
