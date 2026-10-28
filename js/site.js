@@ -29,6 +29,7 @@ function clientForm(c = {}, after) {
       <div class="grid2">${field('Contact Name', 'contact', c.contact)}${field('Phone', 'phone', c.phone, { type: 'tel' })}</div>
       ${field('Email', 'email', c.email, { type: 'email' })}
       ${field('Address', 'address', c.address, { type: 'textarea' })}
+      ${typeof clientProfileFields === 'function' ? clientProfileFields(c) : ''}
       ${field('Notes', 'notes', c.notes, { type: 'textarea' })}`,
     onOpen: bindLogo,
     buttons: [
@@ -37,6 +38,7 @@ function clientForm(c = {}, after) {
         const v = formValues(m);
         if (!v.name) { toast('Enter the client name'); return false; }
         v.logo = logo;
+        if (typeof clientProfileRead === 'function') clientProfileRead(m, v);
         const rec = Store.upsert('clients', Object.assign(c, v));
         toast('Client saved');
         after ? after(rec) : go(`#/client/${rec.id}`);
@@ -58,16 +60,27 @@ function clientStats(clientId) {
 
 function viewClients() {
   setCrumbs([['Clients & Sites']]);
-  const clients = [...Store.list('clients')].sort((a, b) => a.name.localeCompare(b.name));
+  const all = [...Store.list('clients')].sort((a, b) => a.name.localeCompare(b.name));
+  const f = viewClients.filter || (viewClients.filter = { sector: '', area: '' });
+  const clients = all.filter(c => (!f.sector || c.sector === f.sector) && (!f.area || (c.area || '').toLowerCase() === f.area.toLowerCase()));
+  const areas = [...new Set(all.map(c => (c.area || '').trim()).filter(Boolean))].sort();
+  const sectors = [...new Set(all.map(c => c.sector).filter(Boolean))].sort();
   $('#view').innerHTML = `
-    <div class="spread mb"><h1>Clients &amp; Sites</h1><button class="btn primary" id="addClient">+ New Client</button></div>
-    ${clients.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Client</th><th>Contact</th><th>Sites</th><th>Items</th><th>Defects</th><th>Overdue</th></tr></thead><tbody>
+    <div class="spread mb"><h1>Clients &amp; Sites</h1><div class="row"><a class="btn" href="#/updates">Send An Update</a><button class="btn primary" id="addClient">+ New Client</button></div></div>
+    ${all.length > 1 && (areas.length || sectors.length) ? `<div class="row mb" id="clientFilter">
+      <select data-f="sector" style="width:auto"><option value="">All Business Types</option>${sectors.map(s => `<option ${s === f.sector ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
+      <select data-f="area" style="width:auto"><option value="">All Areas</option>${areas.map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select>
+      <span class="small muted">${clients.length} of ${all.length}</span></div>` : ''}
+    ${clients.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Client</th><th>Type &amp; Area</th><th>Contact</th><th>Sites</th><th>Items</th><th>Defects</th><th>Overdue</th></tr></thead><tbody>
       ${clients.map(c => { const st = clientStats(c.id); return `<tr class="click" data-href="#/client/${c.id}">
-        <td>${c.logo ? `<img class="client-logo-sm" src="${c.logo}" alt=""> ` : ''}<b>${esc(c.name)}</b>${c.demo ? ' <span class="badge b-untested">Demo</span>' : ''}</td><td>${esc(c.contact || '')}<div class="small muted">${esc(c.email || '')}</div></td>
+        <td>${c.logo ? `<img class="client-logo-sm" src="${c.logo}" alt=""> ` : ''}<b>${esc(c.name)}</b>${c.demo ? ' <span class="badge b-untested">Demo</span>' : ''}</td>
+        <td>${esc(c.sector || '—')}<div class="small muted">${esc([c.area, c.employees ? c.employees + ' staff' : ''].filter(Boolean).join(' · '))}</div></td>
+        <td>${esc(c.contact || '')}<div class="small muted">${esc(c.email || '')}</div></td>
         <td>${st.sites.length}</td><td>${st.items.length}</td>
         <td>${st.defects ? `<span class="badge b-fail">${st.defects}</span>` : '0'}</td>
         <td>${st.overdue ? `<span class="badge b-overdue">${st.overdue}</span>` : '0'}</td></tr>`; }).join('')}
-      </tbody></table></div>` : `<div class="card empty"><h3>No Clients Yet</h3><p>Add your first client, then add their sites (buildings).</p></div>`}`;
+      </tbody></table></div>` : all.length ? '<div class="card empty"><h3>No Clients Match</h3><p>Change the filters above.</p></div>' : `<div class="card empty"><h3>No Clients Yet</h3><p>Add your first client, then add their sites (buildings).</p></div>`}`;
+  $$('#clientFilter select').forEach(s => s.onchange = () => { f[s.dataset.f] = s.value; viewClients(); });
   $('#addClient').onclick = () => clientForm();
   bindRowLinks();
 }
@@ -81,6 +94,8 @@ function viewClient(id) {
     <div class="spread"><div class="row" style="flex-wrap:nowrap;align-items:center">${c.logo ? `<img class="client-logo" src="${c.logo}" alt="">` : ''}<div><h1>${esc(c.name)}</h1><div class="muted">${esc([c.contact, c.phone, c.email].filter(Boolean).join(' · '))}</div></div></div>
       <div class="row staff-only"><button class="btn" id="editClient">Edit</button><button class="btn danger" id="delClient">Delete</button><button class="btn primary" id="addSite">+ New Site</button></div></div>
     ${c.address || c.notes ? `<div class="card mt"><div class="kv"><div>Address</div><div>${esc(c.address || '—')}</div><div>Notes</div><div>${esc(c.notes || '—')}</div></div></div>` : ''}
+    ${typeof clientProfileCard === 'function' ? clientProfileCard(c) : ''}
+    ${typeof clientUpdatesCard === 'function' ? clientUpdatesCard(c) : ''}
     <h2 class="mt">Sites</h2>
     ${st.sites.length ? `<div class="cards">${st.sites.map(s => {
       const items = st.items.filter(i => i.siteId === s.id);

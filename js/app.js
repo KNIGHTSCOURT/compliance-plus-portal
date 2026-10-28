@@ -45,6 +45,7 @@ const ROUTES = [
   [/^#\/quotes$/, () => viewQuotes(), 'quotes'],
   [/^#\/quotes\/prices$/, () => viewPriceList(), 'quotes'],
   [/^#\/quote\/([^/]+)$/, id => viewQuote(id), 'quotes'],
+  [/^#\/updates$/, () => viewUpdates(), 'clients'],
   [/^#\/settings$/, () => viewSettings(), 'settings'],
   [/^#\/account$/, () => viewAccount(), 'account']
 ];
@@ -52,7 +53,7 @@ const ROUTES = [
 let appStarted = false;
 
 function clientRouteAllowed(h) {
-  if (/^#\/(clients|due|settings|inspect|quote)/.test(h)) return false;
+  if (/^#\/(clients|due|settings|inspect|quote|updates)/.test(h)) return false;
   const m = h.match(/^#\/client\/([^/]+)/);
   if (m && decodeURIComponent(m[1]) !== Cloud.clientId) return false;
   return true;
