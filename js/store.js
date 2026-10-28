@@ -8,7 +8,7 @@
 
 const Store = (() => {
   const DB_NAME = 'compliance-plus';
-  const COLLS = ['clients', 'sites', 'items', 'inspections', 'assessments', 'photos'];
+  const COLLS = ['clients', 'sites', 'items', 'inspections', 'assessments', 'photos', 'quotes'];
   let idb = null;
   let data = null;
   let saveTimer = null;

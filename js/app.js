@@ -42,6 +42,9 @@ const ROUTES = [
   [/^#\/due$/, () => viewDue(), 'due'],
   [/^#\/scan$/, () => viewScan(), 'scan'],
   [/^#\/search\/(.*)$/, q => viewSearch(q), ''],
+  [/^#\/quotes$/, () => viewQuotes(), 'quotes'],
+  [/^#\/quotes\/prices$/, () => viewPriceList(), 'quotes'],
+  [/^#\/quote\/([^/]+)$/, id => viewQuote(id), 'quotes'],
   [/^#\/settings$/, () => viewSettings(), 'settings'],
   [/^#\/account$/, () => viewAccount(), 'account']
 ];
@@ -49,7 +52,7 @@ const ROUTES = [
 let appStarted = false;
 
 function clientRouteAllowed(h) {
-  if (/^#\/(clients|due|settings|inspect)/.test(h)) return false;
+  if (/^#\/(clients|due|settings|inspect|quote)/.test(h)) return false;
   const m = h.match(/^#\/client\/([^/]+)/);
   if (m && decodeURIComponent(m[1]) !== Cloud.clientId) return false;
   return true;
@@ -308,7 +311,7 @@ async function viewSettings() {
           <p class="small muted">${usage}</p>
           <div class="row"><button class="btn primary" id="exportBtn">Download Backup</button><label class="btn" style="color:inherit;font-size:inherit">Restore From Backup<input type="file" id="importIn" accept=".json,application/json" hidden></label></div>
         </div>
-        <div class="card"><h2>Demo Data</h2>
+        <div class="card local-only"><h2>Demo Data</h2>
           <p class="small">Load a sample business centre with plans, items, inspections and risk assessments to see how everything works.</p>
           <div class="row">${hasDemo ? '<button class="btn" id="rmDemo">Remove Demo Data</button>' : '<button class="btn" id="addDemo">Load Demo Data</button>'}</div>
         </div>

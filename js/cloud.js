@@ -130,6 +130,7 @@ const Cloud = (() => {
 
   function rowClientId(coll, rec) {
     if (!rec) return null;
+    if (coll === 'quotes') return null; // quotes and the price list are staff-only
     if (coll === 'clients') return rec.id;
     if (coll === 'sites') return rec.clientId || null;
     if (coll === 'photos') return rec.clientId || null;
