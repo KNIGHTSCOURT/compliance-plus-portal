@@ -4,6 +4,8 @@
    Everything it creates is marked demo: true and can be removed in Settings. */
 
 function loadDemoData() {
+  // Never mix sample records into the live online records.
+  if (typeof Cloud !== 'undefined' && Cloud.signedIn) throw new Error('Demo data can only be loaded when not signed in, so it never reaches the online records.');
   const uid = Store.uid;
   const client = Store.upsert('clients', { demo: true, name: 'Demo — Riverside Business Centre Ltd', contact: 'Sam Patel', phone: '01785 000000', email: 'facilities@example.com', address: '1 Riverside Way, Stafford', notes: 'Sample client created to show how the portal works.' });
   const room = (name, x, y, w, d) => ({ id: uid(), name, x, y, w, d });

@@ -93,9 +93,16 @@ function viewDashboard() {
   const recent = [...Store.list('inspections')].sort((a, b) => (b.date + (b.createdAt || '')).localeCompare(a.date + (a.createdAt || ''))).slice(0, 8);
   const s = Store.settings;
   const siteName = id => (Store.get('sites', id) || {}).name || '';
+  // Compliance score: of the items inspected, the share whose latest result is a pass (advisories count as half).
+  const done = states.filter(x => x.st.last);
+  const inspected = done.length;
+  const pts = done.reduce((n, x) => n + (x.st.outcome === 'pass' ? 1 : x.st.outcome === 'advisory' ? .5 : 0), 0);
+  const score = inspected ? Math.round(pts / inspected * 100) : 0;
+  const scoreColour = !inspected ? '#cfc2cb' : score >= 85 ? 'var(--lime-2)' : score >= 60 ? '#e0a020' : '#b42318';
+  const scoreText = inspected ? `${inspected} of ${items.length} items inspected` : 'No inspections yet';
 
   $('#view').innerHTML = `
-    <div class="spread mb"><div><h1>${esc(s.businessName)}</h1><div class="muted">${esc(s.tagline || '')}</div></div>
+    <div class="spread dash-hello"><div><h1>${esc(s.businessName)}</h1><div class="muted">${esc(s.tagline || '')}</div></div>
       <div class="row"><a class="btn" href="#/scan">Scan QR</a><button class="btn primary" id="dashAddClient">+ New Client</button></div></div>
     ${!clients.length ? `<div class="card mb"><h2>Getting Started</h2>
       <ol>
@@ -105,26 +112,33 @@ function viewDashboard() {
         <li>Print the <b>QR labels</b> and stick one on each item.</li>
         <li>On site, scan a label (or open the item) and tap <b>Inspect</b>. When done, create the <b>client report</b> as a PDF.</li>
       </ol>
-      <div class="row"><button class="btn primary" id="startClient">Add First Client</button><button class="btn" id="loadDemo">Load Demo Data To Try It Out</button></div></div>` : ''}
-    <div class="tiles">
-      <div class="tile"><div class="num">${clients.length}</div><div class="lbl">Clients</div></div>
-      <div class="tile"><div class="num">${sites.length}</div><div class="lbl">Sites</div></div>
-      <div class="tile"><div class="num">${items.length}</div><div class="lbl">Items Tracked</div></div>
-      <div class="tile"><div class="num">${thisMonth}</div><div class="lbl">Inspections This Month</div></div>
-      <div class="tile ${overdue.length ? 'alert' : ''} link-card" data-href="#/due"><div class="num">${overdue.length}</div><div class="lbl">Overdue</div></div>
-      <div class="tile ${defects.length ? 'alert' : ''}"><div class="num">${defects.length}</div><div class="lbl">Open Defects</div></div>
+      <div class="row"><button class="btn primary" id="startClient">Add First Client</button>${Cloud.signedIn ? '' : '<button class="btn" id="loadDemo">Load Demo Data To Try It Out</button>'}</div></div>` : ''}
+    <div class="dash-stats">
+      <a class="dash-stat" href="#/clients"><span class="dash-stat-lbl">Clients &amp; Sites</span><span class="dash-stat-num">${clients.length}</span>
+        <span class="dash-stat-sub">${sites.length} ${sites.length === 1 ? 'site' : 'sites'} · ${items.length} items</span><span class="dash-stat-ic">${themeIconSafe('clients')}</span></a>
+      <div class="dash-stat"><span class="dash-stat-lbl">Compliance Score</span>
+        <div class="dash-ring-wrap"><span class="dash-stat-sub">${scoreText}</span><span class="dash-ring" style="--pct:${score};--ring:${scoreColour}">${inspected ? score + '%' : '–'}</span></div></div>
+      <a class="dash-stat ${overdue.length ? 'alert' : ''}" href="#/due"><span class="dash-stat-lbl">Overdue</span><span class="dash-stat-num">${overdue.length}</span>
+        <span class="dash-stat-sub">${dueSoon.length - overdue.length} more due in 30 days</span><span class="dash-stat-ic ${overdue.length ? 'red' : 'lime'}">${themeIconSafe('due')}</span></a>
+      <div class="dash-stat ${defects.length ? 'alert' : ''}"><span class="dash-stat-lbl">Open Defects</span><span class="dash-stat-num">${defects.length}</span>
+        <span class="dash-stat-sub">${thisMonth} ${thisMonth === 1 ? 'inspection' : 'inspections'} this month</span><span class="dash-stat-ic ${defects.length ? '' : 'lime'}">${themeIconSafe('alert')}</span></div>
     </div>
-    <div class="grid2" style="align-items:start">
-      <div class="card"><div class="spread"><h2>Due &amp; Overdue (30 Days)</h2><a href="#/due" class="small">View All</a></div>
+    <div class="dash-row">
+      <div class="card barred"><div class="card-bar"><h3>Latest Results</h3><a href="#/due">Due &amp; Overdue</a></div>
+        ${dashResultBars(states)}</div>
+      ${dashCalendarCard(states, siteName)}
+    </div>
+    <div class="grid2" style="align-items:start;gap:14px">
+      <div class="card barred"><div class="card-bar"><h3>Due &amp; Overdue (30 Days)</h3><a href="#/due">View All</a></div>
         ${dueSoon.length ? `<table class="list"><tbody>${dueSoon.slice(0, 10).map(({ it, st }) => `<tr class="click" data-href="#/item/${it.id}">
           <td>${typeChip(it.type)}</td><td><b>${esc(it.ref)}</b><div class="small muted">${esc(siteName(it.siteId))}</div></td><td>${dueBadge(st)}</td></tr>`).join('')}</tbody></table>`
         : '<p class="muted">Nothing due in the next 30 days.</p>'}</div>
-      <div class="card"><h2>Open Defects</h2>
+      <div class="card barred"><div class="card-bar"><h3>Open Defects</h3></div>
         ${defects.length ? `<table class="list"><tbody>${defects.slice(0, 10).map(({ it, st }) => `<tr class="click" data-href="#/item/${it.id}">
           <td>${typeChip(it.type)}</td><td><b>${esc(it.ref)}</b> ${esc(itemTitle(it))}<div class="small muted">${esc(siteName(it.siteId))} · ${esc(st.last.action || failedChecksText(it, st.last).join('; '))}</div></td></tr>`).join('')}</tbody></table>`
         : '<p class="muted">No open defects.</p>'}</div>
     </div>
-    <div class="card"><h2>Recent Inspections</h2>
+    <div class="card barred" style="margin-top:14px"><div class="card-bar"><h3>Recent Inspections</h3></div>
       ${recent.length ? `<div class="table-wrap"><table class="list"><thead><tr><th>Date</th><th>Item</th><th>Site</th><th>Inspector</th><th>Result</th></tr></thead><tbody>
         ${recent.map(x => { const it = Store.get('items', x.itemId); if (!it) return ''; return `<tr class="click" data-href="#/item/${it.id}"><td>${esc(fmtDate(x.date))}</td><td>${typeChip(it.type)} <b>${esc(it.ref)}</b> ${esc(itemTitle(it))}</td><td>${esc(siteName(it.siteId))}</td><td>${esc(x.inspector || '')}</td><td>${outcomeBadge(x.outcome)}</td></tr>`; }).join('')}
       </tbody></table></div>` : '<p class="muted">No inspections yet.</p>'}</div>`;
@@ -133,6 +147,42 @@ function viewDashboard() {
   if ($('#startClient')) $('#startClient').onclick = addC;
   if ($('#loadDemo')) $('#loadDemo').onclick = () => { const site = loadDemoData(); toast('Demo data loaded'); go(`#/site/${site.id}/plan`); };
   bindRowLinks();
+}
+
+function themeIconSafe(name) { return typeof themeIcon === 'function' ? themeIcon(name, 26) : ''; }
+
+/* Dashboard card: how many items stand at each latest result. */
+function dashResultBars(states) {
+  const rows = [['Pass', 'pass', '#16794b'], ['Advisory', 'advisory', '#c88100'], ['Fail', 'fail', '#b42318'], ['Not Inspected', 'untested', '#a898a4']]
+    .map(([name, key, colour]) => ({ name, colour, n: states.filter(x => x.st.outcome === key).length }));
+  const known = rows.reduce((t, r) => t + r.n, 0);
+  if (states.length - known > 0) rows.push({ name: 'Other', colour: '#7a6b77', n: states.length - known });
+  const max = Math.max(1, ...rows.map(r => r.n));
+  if (!states.length) return '<p class="muted">No items yet. Add them on a site\'s Plan &amp; 3D tab.</p>';
+  return rows.map(r => `<div class="dash-bar"><span class="dash-bar-name">${esc(r.name)}</span>
+    <span class="dash-bar-track"><span class="dash-bar-fill" style="width:${Math.round(r.n / max * 100)}%;background:${r.colour}${r.n ? '' : ';min-width:0'}"></span></span>
+    <b class="dash-bar-n">${r.n}</b></div>`).join('') + `<div class="small muted" style="margin-top:8px">${states.length} ${states.length === 1 ? 'item' : 'items'} in all.</div>`;
+}
+
+/* Dashboard card: this month, with a dot on each day something falls due. */
+function dashCalendarCard(states, siteName) {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth(), todayN = now.getDate();
+  const ym = today().slice(0, 7), t = today();
+  const byDay = {};
+  states.forEach(({ st }) => { if (st.due && st.due.slice(0, 7) === ym) { const d = Number(st.due.slice(8, 10)); byDay[d] = byDay[d] || { n: 0, over: false }; byDay[d].n++; if (st.overdue) byDay[d].over = true; } });
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push('<span class="dash-day dash-blank"></span>');
+  for (let d = 1; d <= days; d++) {
+    const b = byDay[d];
+    cells.push(`<span class="dash-day${d === todayN ? ' dash-today' : ''}${b ? ' dash-has' : ''}${b && b.over ? ' dash-over' : ''}" title="${b ? b.n + ' due' : ''}">${d}</span>`);
+  }
+  const next = states.filter(x => x.st.due && x.st.due >= t).sort((a, b) => a.st.due.localeCompare(b.st.due)).slice(0, 3);
+  const list = next.map(({ it, st }) => `<a class="dash-next" href="#/item/${it.id}"><b>${esc(new Date(st.due + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}</b><span>${esc(it.ref)} · ${esc(itemTitle(it))}${siteName(it.siteId) ? ' · ' + esc(siteName(it.siteId)) : ''}</span></a>`).join('');
+  const dows = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => `<span class="dash-dow">${d}</span>`).join('');
+  return `<div class="card barred"><div class="card-bar"><h3>${esc(now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }))}</h3><a href="#/due">All Due Dates</a></div>
+    <div class="dash-cal">${dows}${cells.join('')}</div>
+    <div class="dash-nexts">${list || '<div class="small muted">Nothing is due yet.</div>'}</div></div>`;
 }
 
 /* ---------- Due & overdue ---------- */
@@ -319,6 +369,7 @@ async function viewSettings() {
 function applyBranding() {
   $('#brandName').textContent = Store.settings.businessName;
   updateSyncNote();
+  if (typeof themeProfile === 'function') themeProfile();
 }
 
 function updateSyncNote() {

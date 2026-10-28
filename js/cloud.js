@@ -156,7 +156,9 @@ const Cloud = (() => {
       delete Store.photoOutbox[id];
     }
     const sj = JSON.stringify(Store.settings);
-    if (sj !== Store.meta.settingsJson && !Store.outbox['settings|main']) Store.outbox['settings|main'] = { coll: 'settings', id: 'main' };
+    // A device that has never downloaded the online records must not upload its blank settings over the real ones.
+    if (!Store.meta.lastPull) delete Store.outbox['settings|main'];
+    else if (sj !== Store.meta.settingsJson && !Store.outbox['settings|main']) Store.outbox['settings|main'] = { coll: 'settings', id: 'main' };
     const entries = Object.entries(Store.outbox);
     for (let i = 0; i < entries.length; i += 200) {
       const chunk = entries.slice(i, i + 200);

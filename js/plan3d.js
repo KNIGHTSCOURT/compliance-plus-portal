@@ -119,7 +119,7 @@ class Plan3D {
     const tw = Math.ceil(ctx.measureText(text).width);
     if (opts.circle) {
       c.width = c.height = fs * 2;
-      ctx.fillStyle = opts.bg || '#13294b';
+      ctx.fillStyle = opts.bg || '#2b0d24';
       ctx.beginPath(); ctx.arc(fs, fs, fs - 3, 0, Math.PI * 2); ctx.fill();
       ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke();
     } else {
@@ -241,7 +241,7 @@ class Plan3D {
           }
         });
 
-        const fl = this.textSprite(floor.name || 'Floor', { bg: '#13294b', color: '#fff', height: 0.8 });
+        const fl = this.textSprite(floor.name || 'Floor', { bg: '#2b0d24', color: '#fff', height: 0.8 });
         fl.position.set(b.x0 - 0.2, elev + h + 0.6, b.y0 - 0.2);
         this.group.add(fl);
 

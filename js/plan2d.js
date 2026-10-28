@@ -95,7 +95,7 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     if (r.lx != null) {
       // Room taken from a drawing: the walls show its shape, so just label it at its plan position.
       if (opts.selectedRoomId === r.id) {
-        ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e4572e'; ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e6197d'; ctx.lineWidth = 2;
         ctx.strokeRect(x, y, r.w * view.scale, r.d * view.scale); ctx.setLineDash([]);
       }
       const [lx, ly] = S(r.lx, r.ly);
@@ -113,7 +113,7 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     ctx.fillRect(x, y, w, h);
     ctx.globalAlpha = 1;
     const sel = opts.selectedRoomId === r.id;
-    ctx.strokeStyle = sel ? '#e4572e' : '#34495e';
+    ctx.strokeStyle = sel ? '#e6197d' : '#34495e';
     ctx.lineWidth = sel ? 3 : 2;
     ctx.strokeRect(x, y, w, h);
     if (w > 40 * k && h > 22 * k) {
@@ -135,9 +135,9 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     const p = opts.preview;
     const [x, y] = S(Math.min(p.x0, p.x1), Math.min(p.y0, p.y1));
     const w = Math.abs(p.x1 - p.x0) * view.scale, h = Math.abs(p.y1 - p.y0) * view.scale;
-    ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e4572e'; ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]); ctx.strokeStyle = '#e6197d'; ctx.lineWidth = 2;
     ctx.fillStyle = 'rgba(228,87,46,.08)'; ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
-    ctx.fillStyle = '#e4572e'; ctx.font = '600 12px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#e6197d'; ctx.font = '600 12px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
     ctx.fillText(`${Math.abs(p.x1 - p.x0).toFixed(2)} × ${Math.abs(p.y1 - p.y0).toFixed(2)} m`, x + 4, y - 4);
   }
 
@@ -148,7 +148,7 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     const [x, y] = S(it.x, it.y);
     const status = opts.statusOf ? opts.statusOf(it) : 'untested';
     if (opts.highlightId === it.id) {
-      ctx.strokeStyle = '#e4572e'; ctx.lineWidth = 4;
+      ctx.strokeStyle = '#e6197d'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(x, y, r0 + 9, 0, Math.PI * 2); ctx.stroke();
     }
     const type = ITEM_TYPES[it.type] || ITEM_TYPES.other;
@@ -158,7 +158,7 @@ function drawPlan(ctx, W, H, view, floor, items, opts = {}) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, r0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     if (opts.selectedItemId === it.id) {
-      ctx.strokeStyle = '#13294b'; ctx.lineWidth = 3;
+      ctx.strokeStyle = '#2b0d24'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(x, y, r0 + 6, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -404,9 +404,9 @@ class PlanEditor {
       const ctx = this.ctx, v = this.view;
       const a = this.measureA, b = this.hover || a;
       const ax = v.ox + a.x * v.scale, ay = v.oy + a.y * v.scale, bx = v.ox + b.x * v.scale, by = v.oy + b.y * v.scale;
-      ctx.strokeStyle = '#e4572e'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = '#e6197d'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = '#e4572e';
+      ctx.fillStyle = '#e6197d';
       for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); }
       ctx.font = '600 12px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
       ctx.fillText(`${Math.hypot(b.x - a.x, b.y - a.y).toFixed(2)} m on plan`, bx + 8, by - 6);
