@@ -123,7 +123,7 @@ body.side-collapsed .side-profile .avatar svg { width: 22px; height: 22px; }
 .dash-stat { position: relative; display: flex; flex-direction: column; min-height: 138px; border-radius: 20px; overflow: hidden; background: #fff; color: var(--text); text-decoration: none; border: 0; padding: 0; text-align: left; font: inherit; }
 button.dash-stat, a.dash-stat { cursor: pointer; transition: box-shadow .15s; }
 button.dash-stat:hover, a.dash-stat:hover { box-shadow: 0 10px 26px rgba(43, 13, 36, .14); }
-.dash-stat-lbl { padding: 10px 18px; background: var(--bar); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.dash-stat-lbl { padding: 10px 18px; background: var(--bar); color: var(--lime); font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .dash-stat-num { padding: 18px 18px 22px; font-family: 'Poppins', sans-serif; font-size: 46px; font-weight: 800; letter-spacing: -.045em; line-height: 1; }
 .dash-stat-sub { padding: 0 18px 16px; margin-top: -12px; font-size: 12.5px; color: var(--muted); font-weight: 600; max-width: calc(100% - 80px); }
 .dash-stat-ic { position: absolute; right: 16px; bottom: 18px; width: 52px; height: 52px; border-radius: 14px; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
@@ -163,7 +163,7 @@ button.dash-stat:hover, a.dash-stat:hover { box-shadow: 0 10px 26px rgba(43, 13,
 /* dark title bars on the dashboard's cards (and on form cards, below) */
 .card.barred { overflow: hidden; padding-top: 0; }
 .card.barred > .card-bar { margin: 0 -20px 14px; padding: 10px 20px; background: var(--bar); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 42px; }
-.card.barred > .card-bar h2, .card.barred > .card-bar h3 { margin: 0; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .03em; }
+.card.barred > .card-bar h2, .card.barred > .card-bar h3 { margin: 0; color: var(--lime); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .03em; }
 .card.barred > .card-bar a, .card.barred > .card-bar .btn { background: rgba(255, 255, 255, .14); color: #fff; padding: 4px 12px; font-size: 11.5px; border-radius: 999px; border: 0; text-decoration: none; font-weight: 700; }
 .card.barred > .card-bar a:hover, .card.barred > .card-bar .btn:hover { background: var(--accent); }
 

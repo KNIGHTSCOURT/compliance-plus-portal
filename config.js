@@ -2,7 +2,7 @@
 // Business details shown on screen, labels and reports can also be edited
 // in the portal under Settings (those saved settings take priority).
 window.CP_CONFIG = {
-  version: '1.8.1',
+  version: '1.8.2',
   businessName: 'Compliance Plus',
   tagline: 'Fire Door Inspections · Fire & Health and Safety Risk Assessments · PAT Testing',
   refPrefix: 'CP',
