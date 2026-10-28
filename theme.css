@@ -351,3 +351,8 @@ body.printing .side-collapse { display: none; }
 .cu-note summary b::before { content: '▸'; color: var(--accent); margin-right: 6px; }
 .cu-note[open] summary b::before { content: '▾'; }
 .cu-body { margin-top: 8px; font-size: 14px; line-height: 1.55; color: #3b2d37; }
+
+/* Address boxes (v1.9.0) */
+.addr-box { border: 1px solid var(--line, #e6dbe3); border-radius: 14px; padding: 10px 14px 2px; margin: 0 0 14px; min-width: 0; }
+.addr-box legend { padding: 0 6px; font-weight: 700; font-size: 13px; color: var(--navy); }
+.addr-row1 { display: grid; grid-template-columns: 90px 1fr; gap: 0 14px; }

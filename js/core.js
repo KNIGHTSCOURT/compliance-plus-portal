@@ -182,6 +182,65 @@ function field(label, name, value = '', opts = {}) {
   return `<div class="field ${opts.cls || ''}"><label for="${id}">${esc(label)}${opts.required ? ' *' : ''}</label>${input}${opts.hint ? `<div class="small muted">${opts.hint}</div>` : ''}</div>`;
 }
 
+/* ---------- Addresses (v1.9.0) ----------
+   Every address is entered in separate boxes: No, Building Name, Address Lines 1-3, Town, County, Postcode.
+   The boxes are kept in rec[key + 'Parts']; rec[key] keeps the joined-up text so reports and lists still work.
+   Sites keep the postcode in its own s.postcode as before (pass pcKey 'postcode'). */
+const ADDR_BOXES = [['no', 'No'], ['building', 'Building Name'], ['line1', 'Address Line 1'], ['line2', 'Address Line 2'], ['line3', 'Address Line 3'], ['town', 'Town'], ['county', 'County'], ['postcode', 'Postcode']];
+const ADDR_POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
+
+/* the boxes for a record: saved boxes if there are any, otherwise the old one-line address split up as well as possible */
+function addrParts(rec, key, pcKey) {
+  rec = rec || {};
+  const saved = rec[key + 'Parts'];
+  if (saved && typeof saved === 'object') return Object.assign({}, saved);
+  const p = {};
+  const bits = String(rec[key] || '').split(/\r?\n|,/).map(x => x.trim()).filter(Boolean);
+  if (pcKey && rec[pcKey]) p.postcode = rec[pcKey];
+  if (bits.length && ADDR_POSTCODE.test(bits[bits.length - 1])) { const pc = bits.pop(); if (!p.postcode) p.postcode = pc.toUpperCase(); }
+  if (bits.length >= 2) p.town = bits.pop();
+  // "12 High Street" -> No 12, Line 1 High Street
+  if (bits.length) { const m = bits[0].match(/^(\d+[A-Za-z]?)\s+(.+)$/); if (m) { p.no = m[1]; bits[0] = m[2]; } }
+  p.line1 = bits[0] || ''; p.line2 = bits[1] || ''; p.line3 = bits.slice(2).join(', ');
+  return p;
+}
+
+function addrFields(label, key, parts) {
+  parts = parts || {};
+  const f = (k, l, extra) => field(l, `${key}__${k}`, parts[k] || '', extra || {});
+  return `<fieldset class="addr-box"><legend>${esc(label)}</legend>
+    <div class="addr-row1">${f('no', 'No', { cls: 'addr-no' })}${f('building', 'Building Name')}</div>
+    ${f('line1', 'Address Line 1')}${f('line2', 'Address Line 2')}${f('line3', 'Address Line 3')}
+    <div class="grid2">${f('town', 'Town')}${f('county', 'County')}</div>
+    <div class="grid2">${f('postcode', 'Postcode', { attrs: 'autocapitalize="characters"' })}<div></div></div></fieldset>`;
+}
+
+/* take the boxes out of a formValues() result and return them */
+function addrRead(v, key) {
+  const p = {};
+  ADDR_BOXES.forEach(([k]) => { const n = `${key}__${k}`; p[k] = String(v[n] || '').trim(); delete v[n]; });
+  p.postcode = p.postcode.toUpperCase().replace(/\s+/g, ' ');
+  if (/^[A-Z0-9]{5,7}$/.test(p.postcode)) p.postcode = p.postcode.slice(0, -3) + ' ' + p.postcode.slice(-3);
+  return p;
+}
+
+/* joined-up text, e.g. "Unit 4, 12 High Street, Stafford, Staffordshire, ST16 2AB" */
+function addrText(p, opts) {
+  p = p || {}; opts = opts || {};
+  const first = [p.no, p.line1].filter(Boolean).join(' ');
+  const out = [p.building, first, p.line2, p.line3, p.town, p.county];
+  if (opts.postcode !== false) out.push(p.postcode);
+  return out.map(x => String(x || '').trim()).filter(Boolean).join(opts.sep || ', ');
+}
+
+/* store the boxes on a record (rec[key + 'Parts'] and the joined-up rec[key]) */
+function addrApply(rec, key, p, pcKey) {
+  rec[key + 'Parts'] = p;
+  rec[key] = addrText(p, { postcode: !pcKey });
+  if (pcKey) rec[pcKey] = p.postcode || '';
+  return rec;
+}
+
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();

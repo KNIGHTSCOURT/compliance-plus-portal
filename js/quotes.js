@@ -153,11 +153,11 @@ function viewQuote(id) {
           ${field('Customer / Company Name', 'name', cu.name)}
           <div class="grid2">${field('Contact Name', 'contact', cu.contact)}${field('Phone', 'phone', cu.phone, { type: 'tel' })}</div>
           ${field('Email', 'email', cu.email, { type: 'email' })}
-          ${field('Billing Address', 'address', cu.address, { type: 'textarea' })}
+          ${addrFields('Billing Address', 'address', addrParts(cu, 'address'))}
         </div>
         <div class="card" id="qSite"><h3>The Site And The Work</h3>
           ${field('Site Name', 'siteName', q.siteName, { placeholder: 'e.g. Depot, Main Office' })}
-          ${field('Site Address', 'siteAddress', q.siteAddress)}
+          ${addrFields('Site Address', 'siteAddress', addrParts(q, 'siteAddress'))}
           <div class="grid2">${field('Floor Area (m², Rough)', 'area', q.area, { type: 'number', attrs: 'min="0"', hint: 'Sets the size for you.' })}
             ${field('Site Size', 'size', q.size, { type: 'select', blank: false, options: Q_SIZES })}</div>
           <p class="small muted" style="margin-top:-6px">${esc(Q_SIZE_HELP)}</p>
@@ -187,8 +187,9 @@ function viewQuote(id) {
   const save = () => {
     const c = formValues($('#qCust')), s = formValues($('#qSite')), m = formValues($('#qMeta'));
     q.clientId = c.clientId || '';
-    q.customer = { name: c.name, contact: c.contact, phone: c.phone, email: c.email, address: c.address };
-    Object.assign(q, { siteName: s.siteName, siteAddress: s.siteAddress, area: s.area, size: s.size, fra: s.fra, hsra: !!s.hsra, doors: qNum(s.doors), pat: qNum(s.pat), plan: !!s.plan, labels: !!s.labels, miles: qNum(s.miles), visits: Math.max(1, qNum(s.visits) || 1) });
+    q.customer = addrApply({ name: c.name, contact: c.contact, phone: c.phone, email: c.email }, 'address', addrRead(c, 'address'));
+    addrApply(q, 'siteAddress', addrRead(s, 'siteAddress'));
+    Object.assign(q, { siteName: s.siteName, area: s.area, size: s.size, fra: s.fra, hsra: !!s.hsra, doors: qNum(s.doors), pat: qNum(s.pat), plan: !!s.plan, labels: !!s.labels, miles: qNum(s.miles), visits: Math.max(1, qNum(s.visits) || 1) });
     Object.assign(q, { date: m.date || today(), status: m.status, discount: qNum(m.discount), billing: m.billing, notes: m.notes });
     q.extra = $$('#qExtra .q-line').map(r => ({ desc: $('[data-k=desc]', r).value.trim(), qty: qNum($('[data-k=qty]', r).value) || 1, unit: qNum($('[data-k=unit]', r).value) }));
     Store.upsert('quotes', q);
@@ -217,7 +218,11 @@ function viewQuote(id) {
   $('#qRoot').addEventListener('change', e => {
     if (e.target.name === 'clientId' && e.target.value) {
       const c = Store.get('clients', e.target.value);
-      if (c) { const f = $('#qCust'); [['name', c.name], ['contact', c.contact], ['phone', c.phone], ['email', c.email], ['address', c.address]].forEach(([k, v]) => { $(`[name=${k}]`, f).value = v || ''; }); }
+      if (c) {
+        const f = $('#qCust'), ap = addrParts(c, 'address');
+        [['name', c.name], ['contact', c.contact], ['phone', c.phone], ['email', c.email]].forEach(([k, v]) => { $(`[name=${k}]`, f).value = v || ''; });
+        ADDR_BOXES.forEach(([k]) => { $(`[name=address__${k}]`, f).value = ap[k] || ''; });
+      }
     }
     save();
   });
@@ -235,8 +240,9 @@ function viewQuote(id) {
 function qToClient(q) {
   const cu = q.customer || {};
   if (!cu.name) { toast('Enter the customer name first'); return; }
-  const client = Store.upsert('clients', { name: cu.name, contact: cu.contact || '', phone: cu.phone || '', email: cu.email || '', address: cu.address || '', notes: `From quote ${q.number}.` });
-  const site = Store.upsert('sites', { clientId: client.id, name: q.siteName || 'Main Site', address: q.siteAddress || cu.address || '', floors: [{ id: Store.uid(), name: 'Ground Floor', level: 0, height: 2.6, rooms: [] }] });
+  const billParts = addrParts(cu, 'address'), siteParts = q.siteAddress ? addrParts(q, 'siteAddress') : billParts;
+  const client = Store.upsert('clients', addrApply({ name: cu.name, contact: cu.contact || '', phone: cu.phone || '', email: cu.email || '', area: billParts.town || '', notes: `From quote ${q.number}.` }, 'address', billParts));
+  const site = Store.upsert('sites', addrApply({ clientId: client.id, name: q.siteName || 'Main Site', floors: [{ id: Store.uid(), name: 'Ground Floor', level: 0, height: 2.6, rooms: [] }] }, 'address', siteParts, 'postcode'));
   // Never 'siteId' on a quote: the sync would then share the quote with that client's login.
   q.clientId = client.id; q.wonSiteId = site.id; Store.upsert('quotes', q);
   if (typeof invalidateState === 'function') invalidateState();

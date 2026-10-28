@@ -297,7 +297,7 @@ async function viewSettings() {
         <div class="grid2">${field('Inspector / Assessor Name', 'assessorName', s.assessorName)}${field('Phone', 'phone', s.phone, { type: 'tel' })}</div>
         ${field('Qualifications & Accreditations', 'qualifications', s.qualifications, { placeholder: 'e.g. FDIS Certified Fire Door Inspector · NEBOSH Fire Certificate · City & Guilds 2377-77 PAT' })}
         <div class="grid2">${field('Email', 'email', s.email, { type: 'email' })}${field('Website', 'website', s.website)}</div>
-        ${field('Business Address', 'address', s.address)}
+        ${addrFields('Business Address', 'address', addrParts(s, 'address'))}
         <div class="field"><label>Logo (For Reports)</label><div class="row">${s.logo ? `<img src="${s.logo}" style="max-height:48px;border:1px solid var(--line);border-radius:6px;padding:2px">` : ''}
           <label class="btn small" style="color:inherit;font-size:.85rem">Choose Image<input type="file" id="logoIn" accept="image/*" hidden></label>${s.logo ? '<button class="btn small danger" id="logoRm">Remove</button>' : ''}</div></div>
         ${field('Report Limitations / Disclaimer', 'reportDisclaimer', s.reportDisclaimer, { type: 'textarea' })}
@@ -326,6 +326,7 @@ async function viewSettings() {
   $('#saveBiz').onclick = () => {
     const v = formValues($('#bizForm'));
     if (!v.businessName) { toast('Enter the business name'); return; }
+    addrApply(v, 'address', addrRead(v, 'address'));
     v.nextRef = Math.max(1, parseInt(v.nextRef, 10) || 1);
     v.refPrefix = (v.refPrefix || 'CP').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'CP';
     Object.assign(s, v);

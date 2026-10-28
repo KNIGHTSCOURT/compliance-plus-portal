@@ -28,7 +28,7 @@ function clientForm(c = {}, after) {
         <div class="small muted">Shown on the client's page, their reports and the information request. PNG with a transparent background looks best.</div></div>
       <div class="grid2">${field('Contact Name', 'contact', c.contact)}${field('Phone', 'phone', c.phone, { type: 'tel' })}</div>
       ${field('Email', 'email', c.email, { type: 'email' })}
-      ${field('Address', 'address', c.address, { type: 'textarea' })}
+      ${addrFields('Address', 'address', addrParts(c, 'address'))}
       ${typeof clientProfileFields === 'function' ? clientProfileFields(c) : ''}
       ${field('Notes', 'notes', c.notes, { type: 'textarea' })}`,
     onOpen: bindLogo,
@@ -38,7 +38,10 @@ function clientForm(c = {}, after) {
         const v = formValues(m);
         if (!v.name) { toast('Enter the client name'); return false; }
         v.logo = logo;
+        const ap = addrRead(v, 'address');
+        addrApply(v, 'address', ap);
         if (typeof clientProfileRead === 'function') clientProfileRead(m, v);
+        if (!v.area && ap.town) v.area = ap.town;
         const rec = Store.upsert('clients', Object.assign(c, v));
         toast('Client saved');
         after ? after(rec) : go(`#/client/${rec.id}`);
@@ -130,7 +133,7 @@ function siteForm(clientId, s = {}) {
   openModal({
     title: s.id ? 'Edit Site' : 'New Site',
     body: `${field('Site / Building Name', 'name', s.name, { required: true })}
-      <div class="grid2">${field('Address', 'address', s.address)}${field('Postcode', 'postcode', s.postcode)}</div>
+      ${addrFields('Site Address', 'address', addrParts(s, 'address', 'postcode'))}
       <div class="grid2">${field('Use Of Building', 'buildingUse', s.buildingUse, { placeholder: 'e.g. Offices, Block Of Flats, Care Home' })}${field('Responsible Person', 'responsiblePerson', s.responsiblePerson)}</div>
       ${field('Access Notes', 'accessNotes', s.accessNotes, { type: 'textarea', placeholder: 'Keys, alarm codes held elsewhere, parking, contact on arrival' })}
       ${field('Notes', 'notes', s.notes, { type: 'textarea' })}`,
@@ -139,6 +142,7 @@ function siteForm(clientId, s = {}) {
       { label: 'Save Site', cls: 'primary', onClick: m => {
         const v = formValues(m);
         if (!v.name) { toast('Enter the site name'); return false; }
+        addrApply(v, 'address', addrRead(v, 'address'), 'postcode');
         const isNew = !s.id;
         Object.assign(s, v, { clientId });
         if (!s.floors || !s.floors.length) s.floors = [{ id: Store.uid(), name: 'Ground Floor', level: 0, height: 2.6, rooms: [] }];
